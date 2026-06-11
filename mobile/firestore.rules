@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// onelane Firestore rules: every document lives under users/{uid} and is
+// readable/writable only by that signed-in user. Deploy with the Firebase CLI:
+//   firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{collection}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Public waitlist: anyone may add their email; nobody may read the list.
+    match /waitlist/{docId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+  }
+}

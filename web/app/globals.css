@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-ink text-white antialiased;
+}
+
+/* The dashed lane marking running down the middle of a "road". */
+.lane-markings {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    theme("colors.line") 0,
+    theme("colors.line") 22px,
+    transparent 22px,
+    transparent 48px
+  );
+}

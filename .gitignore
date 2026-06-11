@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+
+# Turbo
+.turbo/
+
+# Expo
+.expo/
+.expo-shared/
+*.orig.*
+web-build/
+ios/
+android/
+
+# Native / EAS
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log

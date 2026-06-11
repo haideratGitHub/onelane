@@ -1,0 +1,146 @@
+# Data Layer — Firestore (the "backend")
+
+There is no server. This module **is** the backend: the Firestore schema, the
+repository functions that read/write/listen, the security rules that authorize
+access, and the live-sync engine that feeds the UI.
+
+## Files
+
+| File | Role |
+|---|---|
+| `mobile/src/firebase/firebase.ts` | `db = firestore()`, `fbAuth = auth()`; enables Firestore offline persistence. |
+| `mobile/src/firebase/paths.ts` | Collection/doc path builders (the schema, in code). |
+| `mobile/src/firebase/repositories.ts` | All reads/writes/listeners + `toDoc`/`fromDoc` (de)serialization. |
+| `mobile/src/store/useApp.ts` | `useAppSync(uid)` attaches the listeners; actions call the repositories. |
+| `mobile/firestore.rules` | Security rules (per-uid isolation). Deploy with the Firebase CLI. |
+
+## Schema
+
+All app data is **per-user**, nested under `users/{uid}`. Document data is the domain
+object **minus its `id`** (the `id` is the doc id), with **all timestamps as epoch ms
+numbers** (see [architecture.md](architecture.md) §5.1).
+
+```
+users/{uid}
+  profile: { displayName, email, photoURL }
+
+users/{uid}/domains/{domainId}        # a lane
+  { name, color, icon, weeklyTargetHours, order, archived }
+
+users/{uid}/weeks/{weekId}            # weekId e.g. "2026-W24"
+  { startsAt, targets: {domainId: hours}, reflections: [{prompt, answer}], status }
+
+users/{uid}/sessions/{sessionId}      # a focus block
+  { domainId, weekId, intendedOutcome, startAt, endAt|null,
+    segments: [{start, end|null}], plannedDurationMin|null,
+    status: "active"|"completed"|"abandoned", closureNote|null,
+    checkins: [{at, prompt, response}] }
+
+users/{uid}/parkingLot/{itemId}       # a captured distraction
+  { text, createdAt, originSessionId|null, domainId|null,
+    status: "open"|"done"|"promoted"|"dismissed" }
+```
+
+Field-level meaning lives in [domain-model.md](domain-model.md) (the same shapes are
+the domain types). Path builders are in `paths.ts`:
+`userDoc`, `domainsCol`, `weeksCol`, `sessionsCol`, `parkingLotCol`.
+
+## The "API" (repository functions)
+
+These are the only place Firestore is touched. Signatures from
+`mobile/src/firebase/repositories.ts`:
+
+**Serialization helpers (internal):**
+- `toDoc(obj)` → strips `id`. `fromDoc<T>(snap)` → `{ id: snap.id, ...snap.data() }`.
+  Because the doc *is* the object minus id, these are the entire mapping layer.
+
+**domains**
+| Function | Kind | Effect |
+|---|---|---|
+| `bootstrapDomains(uid)` | write | Seeds `DEFAULT_DOMAINS` once (skips if any domain exists). Batch write. |
+| `observeDomains(uid, cb)` | listen | `orderBy("order")`, filters out `archived`, emits `Domain[]`. Returns unsub. |
+| `createDomain(uid, data)` | write | New domain doc; returns its id. |
+| `updateDomain(uid, id, patch)` | write | Partial update (used for `weeklyTargetHours`). |
+
+**weeks**
+| `observeWeek(uid, weekId, cb)` | listen | Emits `Week | null`. `null` when the doc doesn't exist (note: `snap.exists` is a **property** in RN Firebase, not a function). |
+| `upsertWeek(uid, week)` | write | `set(..., {merge:true})` on `weeks/{week.id}`. |
+
+**sessions**
+| `newSessionId(uid)` | id | Pre-generates a Firestore id so a `Session` can be built locally first. |
+| `createSession(uid, session)` | write | `set` (full). |
+| `updateSession(uid, session)` | write | `set(..., {merge:true})`. |
+| `observeActiveSession(uid, cb)` | listen | `where("status","==","active").limit(1)` → `Session | null`. **This is how the app knows the current active session.** |
+| `observeSessionsForWeek(uid, weekId, cb)` | listen | `where("weekId","==",weekId)` → `Session[]`. Powers Today + Review. |
+
+**parkingLot**
+| `addParkingItem(uid, data)` | write | New item; returns id. |
+| `updateParkingItem(uid, id, patch)` | write | Status changes. |
+| `observeOpenParking(uid, cb)` | listen | `where("status","==","open")`, **sorted client-side** by `createdAt` desc. |
+
+**user**
+| `ensureUserDoc(uid, profile)` | write | `set({profile}, {merge:true})`. Called on sign-in. |
+
+## Live-sync engine
+
+`useAppSync(uid)` (in `useApp.ts`, mounted by `app/(app)/_layout.tsx`):
+- Computes `weekId = getWeekId(now, settings.weekStartsOn)` and hydrates the store.
+- Attaches `observeDomains`, `observeWeek`, `observeSessionsForWeek`,
+  `observeActiveSession`, `observeOpenParking` and pipes each into the store.
+- On `observeWeek` returning `null`, calls `ensureWeek()` to snapshot the current
+  week doc from the live domains' targets.
+- Returns a cleanup that unsubscribes all listeners; re-runs when `uid` changes.
+
+Writes are **optimistic**: actions update the Zustand store immediately *and* call a
+repository write; the `onSnapshot` listener then reconciles with the server copy.
+
+## Security rules (`mobile/firestore.rules`)
+
+- `users/{uid}` and everything under it: read/write **only** if
+  `request.auth.uid == uid`. (One nested wildcard rule covers all subcollections.)
+- `waitlist/{doc}`: `create` allowed, read/update/delete denied. **Legacy** — the
+  landing page no longer writes a waitlist; this rule is harmless and can be removed.
+- Deploy: `firebase deploy --only firestore:rules`.
+
+## Indexes
+
+Current queries are all **single-field** equality/`orderBy`, which Firestore serves
+with automatic single-field indexes — **no composite index needed**. ⚠️ If you add a
+query that **combines** a `where` with an `orderBy` on a different field (e.g.
+`where("weekId",...).orderBy("startAt")`), Firestore will require a **composite
+index**; create it from the console link in the thrown error, and note it here.
+
+## Caveats / gotchas
+
+- **Client timestamps, not `serverTimestamp()`.** Intentional. Don't "fix" this by
+  switching to server timestamps — it would break the offline-first, epoch-ms model
+  and the timer math.
+- **RN Firebase API specifics** (these bit us once): `DocumentSnapshot.exists` is a
+  **property**, not `exists()`; a batch comes from the firestore **instance**
+  (`db.batch()`), not from a collection ref. Keep using the **namespaced** API.
+- **`observeActiveSession` assumes ≤1 active session.** If two ever exist, `limit(1)`
+  silently picks one. Preserve the single-active invariant (see [focus-session.md](focus-session.md)).
+- **`merge:true` writes** never delete fields. Removing a field from an entity won't
+  remove it from existing docs — write a migration if needed.
+- **`week.targets` is a snapshot** taken by `ensureWeek` when the week is first seen.
+  The Review screen currently computes targets from **live domains**, not from
+  `week.targets` — so the snapshot is stored but not the read path today. Don't
+  assume `week.targets` drives the review (see [weekly-plan.md](weekly-plan.md) /
+  [weekly-review.md](weekly-review.md)).
+- **Offline persistence is on** (`db.settings({persistence:true})`), wrapped in a
+  catch because settings can only be applied once (hot-reload safe).
+
+## Known gaps
+
+- No data migration tooling; schema changes rely on `merge` + client tolerance.
+- No pagination/retention on sessions (fine at personal scale).
+- `promoted` parking status has no writer yet.
+- Settings are never persisted to `users/{uid}` (no `settings` field written).
+
+---
+
+## 📌 Keeping this doc in sync (read me, Claude)
+Update this whenever you change the Firestore schema, add/modify a repository
+function, change a query (especially anything needing a composite index), or change
+the security rules or the sync wiring. Keep collection paths, field names, and
+function signatures exact. Full protocol in [README.md](README.md).
