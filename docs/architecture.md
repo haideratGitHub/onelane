@@ -30,14 +30,25 @@ Each app has its own `package.json` / `node_modules` and is installed and run on
 own (`cd mobile && npm install`, `cd web && npm install`). They use **npm**, not
 pnpm.
 
+> **mobile install gotcha — `legacy-peer-deps` is required.** Several of Expo's own
+> deps (`expo-asset`, `expo-font`, `expo-file-system`) peer-depend on `expo`, so npm 7+
+> nests them under `node_modules/expo/node_modules/` instead of hoisting them. Metro's
+> flat resolver (`@expo/metro-config`) then can't find them and crashes on start with
+> `The required package 'expo-asset' cannot be found`. `mobile/.npmrc` sets
+> `legacy-peer-deps=true` to force top-level hoisting — keep that file. Always install
+> in `mobile/` with plain `npm install` (it picks up `.npmrc`); if you ever hit the
+> error, the fix is `rm -rf node_modules package-lock.json && npm install`, **not**
+> `npm ci` against a lockfile that already encodes the nested layout.
+
 ## 3. Tech stack
 
 **mobile/**
-- Expo SDK 52 (managed), React Native 0.76, TypeScript, New Architecture enabled.
+- Expo SDK 54 (managed), React Native 0.81, React 19, TypeScript, New Architecture
+  enabled. (Upgraded from SDK 52 because iOS Expo Go only supports the latest SDK.)
 - **Expo Router** (file-based routing) — `mobile/app/`.
-- **NativeWind v4** (Tailwind for RN) — styling via `className`. Config in `mobile/tailwind.config.js`, directives in `mobile/global.css`, wired through `metro.config.js` + `babel.config.js`.
-- **React Native Firebase** (`@react-native-firebase/{app,auth,firestore}`) — Auth + Firestore. **Namespaced API** (e.g. `firestore().collection(...)`), not the modular API.
-- **`@react-native-google-signin/google-signin`** — Google sign-in.
+- **NativeWind v4.2** (Tailwind for RN) — styling via `className`. Config in `mobile/tailwind.config.js`, directives in `mobile/global.css`, wired through `metro.config.js` + `babel.config.js`. ⚠️ **NativeWind ↔ reanimated coupling:** NativeWind 4.2.x's Babel preset unconditionally adds `react-native-worklets/plugin`, which exists only with **reanimated 4** (`react-native-worklets` is installed; reanimated 4's own `/plugin` just forwards to it). Keep the three in lockstep — NativeWind 4.1.x ↔ reanimated 3, NativeWind 4.2.x ↔ reanimated 4 + worklets. `babel.config.js` deliberately has **no explicit reanimated plugin entry** (the NativeWind preset provides it; adding it again risks a duplicate-plugin error).
+- **Firebase JS SDK** (`firebase`) — Auth + Firestore, **modular API** (e.g. `collection(db, …)`, `onSnapshot(query(...))`). *Interim:* migrated off the native `@react-native-firebase` so the app runs in Expo Go. Configured at runtime from `EXPO_PUBLIC_FIREBASE_*` env (no native config file). See [auth.md](auth.md) / [data-firestore.md](data-firestore.md).
+- **Auth: email/password** (interim). Google Sign-In was a native module — deferred to a future dev build.
 - **`expo-notifications`** — local scheduled notifications only (no FCM).
 - **Zustand** — app state. **No Redux, no TanStack Query** (Firestore listeners are the live data source).
 - Pure domain logic in `mobile/src/domain/` (framework-free, unit-tested with **vitest**).
@@ -47,10 +58,17 @@ pnpm.
 - Tailwind v3, **framer-motion** (animations), **lucide-react** (icons).
 - No Firebase, no backend — fully static; deploys to Vercel.
 
-### ⚠️ Native modules → custom dev build required
-Google Sign-In and React Native Firebase are native modules. **The app will not run
-in Expo Go.** You must use a custom dev build: `npx expo run:ios` / `run:android`
-(or an EAS dev build). See [auth.md](auth.md) for the native config files needed.
+### ✅ Runs in Expo Go (interim)
+The app was migrated off native modules to the pure-JS Firebase SDK + email/password
+auth, so it now runs in **Expo Go**: `cd mobile && npm run start`, then scan the QR
+with the Expo Go app. No custom dev build needed. (`expo-dev-client` was removed and
+the `start` script is plain `expo start` so the QR is Expo-Go-scannable.)
+
+**The "more robust" follow-up** is to re-add native Google Sign-In, which *does*
+require a custom dev build (`npx expo run:ios` / `run:android` or EAS) — Google OAuth
+can't redirect in Expo Go since Expo removed its auth proxy. When that happens, this
+section and [auth.md](auth.md) get the native config files + the dev-build workflow
+back.
 
 ## 4. There is no API server
 
@@ -127,9 +145,9 @@ Firestore  ──onSnapshot──►  useAppSync(uid)  ──►  Zustand (useAp
 
 ```
 app/
-├─ _layout.tsx          Root Stack. Mounts auth listener, configures Google Sign-In,
-│                       sets up notifications, gates on `initializing` (splash).
-├─ sign-in.tsx          "/sign-in" — Google sign-in screen.
+├─ _layout.tsx          Root Stack. Mounts auth listener, sets up notifications,
+│                       gates on `initializing` (splash).
+├─ sign-in.tsx          "/sign-in" — email/password sign-in screen.
 ├─ (app)/               Authenticated area (group → no URL segment).
 │  ├─ _layout.tsx       Auth GATE (redirect to /sign-in if no user) + useAppSync + Tabs.
 │  ├─ index.tsx         "/"        Today (home)
@@ -167,7 +185,8 @@ cd mobile
 npm install
 npm test                 # vitest — domain logic (34 tests)
 npm run typecheck        # tsc --noEmit
-npx expo run:ios         # custom dev build (NOT Expo Go)
+npm run start            # Expo Go: scan the QR (interim — no native modules)
+# npx expo run:ios       # only needed once native Google Sign-In returns (dev build)
 
 # Web
 cd web
@@ -177,9 +196,12 @@ npm run build            # static production build
 npm run typecheck
 ```
 
-Before a native mobile build: add `GoogleService-Info.plist` + `google-services.json`
-to `mobile/`, copy `mobile/.env.example` → `.env`, and deploy
-`mobile/firestore.rules`. See [auth.md](auth.md) and [data-firestore.md](data-firestore.md).
+Before running mobile (Expo Go): copy `mobile/.env.example` → `.env` and fill the
+`EXPO_PUBLIC_FIREBASE_*` Web config, enable Email/Password in the Firebase console,
+and deploy `mobile/firestore.rules`. (No `GoogleService-Info.plist` /
+`google-services.json` needed while on the JS SDK — those return only when native
+Google Sign-In does, in a dev build.) See [auth.md](auth.md) and
+[data-firestore.md](data-firestore.md).
 
 ## 10. Known gaps (system-wide)
 

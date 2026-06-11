@@ -3,10 +3,10 @@ import type { ExpoConfig } from "expo/config";
 /**
  * onelane Expo config.
  *
- * Native modules in use (Google Sign-In, React Native Firebase) mean this app
- * must run from a **custom dev build** (`expo run:ios` / EAS dev build), not Expo
- * Go. Drop your Firebase `google-services.json` / `GoogleService-Info.plist` into
- * this folder (gitignored) before building, and set the env vars in `.env`.
+ * Interim setup: the app uses the **pure-JS Firebase SDK** (no native modules), so
+ * it runs in **Expo Go** — `npm run start` then scan the QR. Firebase is configured
+ * at runtime from EXPO_PUBLIC_FIREBASE_* env vars (see `.env.example`), not via a
+ * native config file. Google Sign-In (native) is deferred to a future dev build.
  */
 const config: ExpoConfig = {
   name: "onelane",
@@ -23,30 +23,12 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: "com.onelane.app",
     supportsTablet: true,
-    googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? "./GoogleService-Info.plist",
   },
   android: {
     package: "com.onelane.app",
-    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
   },
   plugins: [
     "expo-router",
-    "@react-native-firebase/app",
-    "@react-native-firebase/auth",
-    [
-      "expo-build-properties",
-      {
-        ios: { useFrameworks: "static" },
-      },
-    ],
-    [
-      "@react-native-google-signin/google-signin",
-      {
-        iosUrlScheme:
-          process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ??
-          "com.googleusercontent.apps.PLACEHOLDER",
-      },
-    ],
     [
       "expo-notifications",
       {
@@ -56,11 +38,6 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
-  },
-  extra: {
-    // Web client ID from Firebase console → used by Google Sign-In to mint the
-    // idToken we exchange for a Firebase credential.
-    googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? null,
   },
 };
 

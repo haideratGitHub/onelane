@@ -17,8 +17,9 @@ deliberate product choice (see the product plan and the "no FCM" decision).
 ## What it does
 
 - **Foreground handler:** shows a banner even when the app is open
-  (`shouldShowAlert:true`, no sound/badge) so an in-app check-in is never silently
-  missed.
+  (`shouldShowBanner:true` + `shouldShowList:true` — SDK 54 split the old
+  `shouldShowAlert` into banner/list; no sound/badge) so an in-app check-in is never
+  silently missed.
 - **`setupNotifications()`** (startup): creates the Android `default` channel,
   registers the `onelane.checkin` **notification category** with three actions
   (`yes` "Still on it", `switched` "Switched", `done` "Done"), and requests

@@ -60,10 +60,12 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
 ## Project snapshot
 
 - **Two independent projects in one repo — no monorepo tooling, no shared package.**
-  - `mobile/` — the product. Expo (managed) SDK 52, React Native, TypeScript, Expo
-    Router, NativeWind, React Native Firebase (Auth + Firestore), Google Sign-In,
-    `expo-notifications`, Zustand. Pure domain logic + vitest tests in
-    `mobile/src/domain/`.
+  - `mobile/` — the product. Expo (managed) SDK 54, React Native 0.81, React 19,
+    TypeScript, Expo Router v6, NativeWind 4.2 (+ reanimated 4 / worklets — keep in
+    lockstep, see architecture.md §3), **Firebase JS SDK** (Auth + Firestore, modular
+    API), **email/password** auth, `expo-notifications`, Zustand. Pure domain logic +
+    vitest tests in `mobile/src/domain/`. *Interim:* migrated off native modules so it
+    **runs in Expo Go** (Google Sign-In deferred to a future dev build).
   - `web/` — Next.js 15 landing page (Tailwind, framer-motion, lucide-react). Static,
     no backend, deploys to Vercel.
 - **No custom server.** "Backend" = Firebase accessed directly via the client SDK;
@@ -86,8 +88,14 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
 - **Lane/brand colors are duplicated** across `mobile/tailwind.config.js`,
   `mobile/src/theme.ts`, `mobile/src/domain/constants.ts`, and `web/tailwind.config.ts`
   — change all of them together.
-- **Native modules ⇒ custom dev build.** The mobile app won't run in Expo Go; use
-  `npx expo run:ios|android`.
+- **Runs in Expo Go (interim).** No native modules currently — `npm run start` then
+  scan the QR. Firebase uses the **JS SDK** (modular API: `collection(db,…)`,
+  `onSnapshot(query(...))`, `snap.exists()`), configured from `EXPO_PUBLIC_FIREBASE_*`
+  env. **No env → demo mode, never a crash**: in-memory backend + sample data
+  (`src/firebase/demo.ts`); every repository function short-circuits to its demo
+  counterpart — keep that pattern when adding repository functions. Re-adding native
+  Google Sign-In later **will** require a custom dev build (`npx expo run:ios|android`).
+  See [docs/auth.md](docs/auth.md).
 
 ## Commands
 
@@ -95,7 +103,7 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
 # Mobile (cd mobile)
 npm test            # vitest — domain logic (keep these passing)
 npm run typecheck   # tsc --noEmit
-npx expo run:ios    # custom dev build (NOT Expo Go)
+npm run start       # Expo Go — scan the QR (interim; no native modules)
 
 # Web (cd web)
 npm run dev
@@ -108,11 +116,13 @@ After domain-logic changes always run `npm test`. After any TS change, run
 
 ## Current known gaps (don't assume these exist)
 
-Settings aren't persisted (week start / quiet hours are defaults); only the current
-week is loaded (no week switcher, streaks not surfaced in UI); no lane add/archive UI
-(target editing only); notification action buttons exist but no response listener
-handles taps; single-active-session has no hard guard; store CTA links on the landing
-page are `#` placeholders. See each module doc's "Known gaps".
+Auth is **interim email/password** (Google Sign-In deferred to a future dev build —
+see [docs/auth.md](docs/auth.md)); settings aren't persisted (week start / quiet hours
+are defaults); only the current week is loaded (no week switcher, streaks not surfaced
+in UI); no lane add/archive UI (target editing only); notification action buttons
+exist but no response listener handles taps; single-active-session has no hard guard;
+store CTA links on the landing page are `#` placeholders. See each module doc's
+"Known gaps".
 
 ---
 

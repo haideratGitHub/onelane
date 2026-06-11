@@ -8,8 +8,10 @@ access, and the live-sync engine that feeds the UI.
 
 | File | Role |
 |---|---|
-| `mobile/src/firebase/firebase.ts` | `db = firestore()`, `fbAuth = auth()`; enables Firestore offline persistence. |
-| `mobile/src/firebase/paths.ts` | Collection/doc path builders (the schema, in code). |
+| `mobile/src/firebase/config.ts` | Env → `firebaseConfig` + `isFirebaseConfigured`. |
+| `mobile/src/firebase/firebase.ts` | Initializes the **Firebase JS SDK** app from `EXPO_PUBLIC_FIREBASE_*` env (**only when configured** — exports are `null` otherwise); `db = initializeFirestore(app, {experimentalForceLongPolling:true})` and `fbAuth` (AsyncStorage persistence). |
+| `mobile/src/firebase/demo.ts` | **Demo mode** in-memory backend (same observe/write contracts, seeded sample data) used when Firebase isn't configured. Every repository function short-circuits to it. |
+| `mobile/src/firebase/paths.ts` | Collection/doc ref builders via modular `collection()`/`doc()` (the schema, in code). |
 | `mobile/src/firebase/repositories.ts` | All reads/writes/listeners + `toDoc`/`fromDoc` (de)serialization. |
 | `mobile/src/store/useApp.ts` | `useAppSync(uid)` attaches the listeners; actions call the repositories. |
 | `mobile/firestore.rules` | Security rules (per-uid isolation). Deploy with the Firebase CLI. |
@@ -63,7 +65,7 @@ These are the only place Firestore is touched. Signatures from
 | `updateDomain(uid, id, patch)` | write | Partial update (used for `weeklyTargetHours`). |
 
 **weeks**
-| `observeWeek(uid, weekId, cb)` | listen | Emits `Week | null`. `null` when the doc doesn't exist (note: `snap.exists` is a **property** in RN Firebase, not a function). |
+| `observeWeek(uid, weekId, cb)` | listen | Emits `Week | null`. `null` when the doc doesn't exist (JS SDK: `snap.exists()` is a **method**). |
 | `upsertWeek(uid, week)` | write | `set(..., {merge:true})` on `weeks/{week.id}`. |
 
 **sessions**
@@ -112,12 +114,20 @@ index**; create it from the console link in the thrown error, and note it here.
 
 ## Caveats / gotchas
 
+- **Demo-mode delegation**: every repository function starts with
+  `if (!isFirebaseConfigured) return demo.…`. If you add a repository function, add
+  its demo counterpart in `demo.ts` too — otherwise demo mode crashes on that path.
+  `paths.ts` uses `db!` on the assumption it's only reached when configured; keep the
+  demo short-circuit **before** any `paths.ts` call.
+
 - **Client timestamps, not `serverTimestamp()`.** Intentional. Don't "fix" this by
   switching to server timestamps — it would break the offline-first, epoch-ms model
   and the timer math.
-- **RN Firebase API specifics** (these bit us once): `DocumentSnapshot.exists` is a
-  **property**, not `exists()`; a batch comes from the firestore **instance**
-  (`db.batch()`), not from a collection ref. Keep using the **namespaced** API.
+- **Firebase JS SDK (modular) API** — the app uses the modular API, not RN Firebase's
+  namespaced one: `snap.exists()` is a **method**; batches are `writeBatch(db)` (then
+  `batch.set(doc(col), data)`); refs are built with `collection(db, …)` / `doc(col[, id])`
+  in `paths.ts`; reads/writes use `getDocs(query(...))`, `setDoc`, `updateDoc`,
+  `onSnapshot(query(...))`. New doc id: `doc(col).id`.
 - **`observeActiveSession` assumes ≤1 active session.** If two ever exist, `limit(1)`
   silently picks one. Preserve the single-active invariant (see [focus-session.md](focus-session.md)).
 - **`merge:true` writes** never delete fields. Removing a field from an entity won't
@@ -127,8 +137,12 @@ index**; create it from the console link in the thrown error, and note it here.
   `week.targets` — so the snapshot is stored but not the read path today. Don't
   assume `week.targets` drives the review (see [weekly-plan.md](weekly-plan.md) /
   [weekly-review.md](weekly-review.md)).
-- **Offline persistence is on** (`db.settings({persistence:true})`), wrapped in a
-  catch because settings can only be applied once (hot-reload safe).
+- **No on-disk offline persistence.** Unlike RN Firebase, the JS SDK on React Native
+  uses an **in-memory cache only** (its IndexedDB persistence isn't available in RN).
+  `firebase.ts` also forces **long polling** (`experimentalForceLongPolling:true`)
+  because Firestore's WebChannel streaming is unreliable in RN/Expo Go — without it
+  `onSnapshot` listeners can stall. `initializeFirestore`/`initializeAuth` are wrapped
+  in try/catch (fall back to `getFirestore`/`getAuth`) so Fast Refresh is safe.
 
 ## Known gaps
 

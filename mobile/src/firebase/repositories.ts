@@ -1,4 +1,18 @@
-import type { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
+import {
+  doc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+  type DocumentData,
+  type DocumentSnapshot,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
 import {
   DEFAULT_DOMAINS,
   type Domain,
@@ -14,8 +28,14 @@ import {
   userDoc,
 } from "./paths";
 import { db } from "./firebase";
+import { isFirebaseConfigured } from "./config";
+import * as demo from "./demo";
 
 /**
+ * The data "API". Every function delegates to the in-memory demo backend
+ * (demo.ts) when Firebase isn't configured — same contracts, no crash, so the
+ * app is walkable before any backend setup.
+ *
  * Because every timestamp in the domain model is a plain number (epoch ms), the
  * Firestore document is just the domain object without its `id` (which is the doc
  * id). These two helpers are the only (de)serialisation we need.
@@ -28,7 +48,7 @@ function toDoc<T extends { id: string }>(obj: T): Doc<T> {
 }
 
 function fromDoc<T extends { id: string }>(
-  snap: FirebaseFirestoreTypes.DocumentSnapshot,
+  snap: DocumentSnapshot<DocumentData> | QueryDocumentSnapshot<DocumentData>,
 ): T {
   return { id: snap.id, ...(snap.data() as Doc<T>) } as T;
 }
@@ -38,12 +58,13 @@ type Unsub = () => void;
 /* ----------------------------- domains ----------------------------- */
 
 export async function bootstrapDomains(uid: string): Promise<void> {
+  if (!isFirebaseConfigured) return demo.seedDemoData();
   const col = domainsCol(uid);
-  const existing = await col.limit(1).get();
+  const existing = await getDocs(query(col, limit(1)));
   if (!existing.empty) return; // already seeded
-  const batch = db.batch();
+  const batch = writeBatch(db!);
   for (const d of DEFAULT_DOMAINS) {
-    batch.set(col.doc(), d);
+    batch.set(doc(col), d);
   }
   await batch.commit();
 }
@@ -52,19 +73,19 @@ export function observeDomains(
   uid: string,
   cb: (domains: Domain[]) => void,
 ): Unsub {
-  return domainsCol(uid)
-    .orderBy("order")
-    .onSnapshot((snap) => {
-      cb(snap.docs.map((d) => fromDoc<Domain>(d)).filter((d) => !d.archived));
-    });
+  if (!isFirebaseConfigured) return demo.observeDomainsDemo(cb);
+  return onSnapshot(query(domainsCol(uid), orderBy("order")), (snap) => {
+    cb(snap.docs.map((d) => fromDoc<Domain>(d)).filter((d) => !d.archived));
+  });
 }
 
 export async function createDomain(
   uid: string,
   data: Omit<Domain, "id">,
 ): Promise<string> {
-  const ref = domainsCol(uid).doc();
-  await ref.set(data);
+  if (!isFirebaseConfigured) return demo.createDomainDemo(data);
+  const ref = doc(domainsCol(uid));
+  await setDoc(ref, data);
   return ref.id;
 }
 
@@ -73,7 +94,8 @@ export function updateDomain(
   id: string,
   patch: Partial<Omit<Domain, "id">>,
 ): Promise<void> {
-  return domainsCol(uid).doc(id).update(patch);
+  if (!isFirebaseConfigured) return demo.updateDomainDemo(id, patch);
+  return updateDoc(doc(domainsCol(uid), id), patch);
 }
 
 /* ------------------------------ weeks ------------------------------ */
@@ -83,42 +105,48 @@ export function observeWeek(
   weekId: string,
   cb: (week: Week | null) => void,
 ): Unsub {
-  return weeksCol(uid)
-    .doc(weekId)
-    .onSnapshot((snap) => {
-      cb(snap.exists ? fromDoc<Week>(snap) : null);
-    });
+  if (!isFirebaseConfigured) return demo.observeWeekDemo(weekId, cb);
+  return onSnapshot(doc(weeksCol(uid), weekId), (snap) => {
+    cb(snap.exists() ? fromDoc<Week>(snap) : null);
+  });
 }
 
 export function upsertWeek(uid: string, week: Week): Promise<void> {
-  return weeksCol(uid).doc(week.id).set(toDoc(week), { merge: true });
+  if (!isFirebaseConfigured) return demo.upsertWeekDemo(week);
+  return setDoc(doc(weeksCol(uid), week.id), toDoc(week), { merge: true });
 }
 
 /* ----------------------------- sessions ---------------------------- */
 
 export function createSession(uid: string, session: Session): Promise<void> {
-  return sessionsCol(uid).doc(session.id).set(toDoc(session));
+  if (!isFirebaseConfigured) return demo.setSessionDemo(session);
+  return setDoc(doc(sessionsCol(uid), session.id), toDoc(session));
 }
 
 export function updateSession(uid: string, session: Session): Promise<void> {
-  return sessionsCol(uid).doc(session.id).set(toDoc(session), { merge: true });
+  if (!isFirebaseConfigured) return demo.setSessionDemo(session);
+  return setDoc(doc(sessionsCol(uid), session.id), toDoc(session), {
+    merge: true,
+  });
 }
 
-/** Pre-generate a Firestore id so the caller can build a Session locally first. */
+/** Pre-generate an id so the caller can build a Session locally first. */
 export function newSessionId(uid: string): string {
-  return sessionsCol(uid).doc().id;
+  if (!isFirebaseConfigured) return demo.newDemoId("s");
+  return doc(sessionsCol(uid)).id;
 }
 
 export function observeActiveSession(
   uid: string,
   cb: (session: Session | null) => void,
 ): Unsub {
-  return sessionsCol(uid)
-    .where("status", "==", "active")
-    .limit(1)
-    .onSnapshot((snap) => {
+  if (!isFirebaseConfigured) return demo.observeActiveSessionDemo(cb);
+  return onSnapshot(
+    query(sessionsCol(uid), where("status", "==", "active"), limit(1)),
+    (snap) => {
       cb(snap.empty ? null : fromDoc<Session>(snap.docs[0]!));
-    });
+    },
+  );
 }
 
 export function observeSessionsForWeek(
@@ -126,11 +154,13 @@ export function observeSessionsForWeek(
   weekId: string,
   cb: (sessions: Session[]) => void,
 ): Unsub {
-  return sessionsCol(uid)
-    .where("weekId", "==", weekId)
-    .onSnapshot((snap) => {
+  if (!isFirebaseConfigured) return demo.observeSessionsForWeekDemo(weekId, cb);
+  return onSnapshot(
+    query(sessionsCol(uid), where("weekId", "==", weekId)),
+    (snap) => {
       cb(snap.docs.map((d) => fromDoc<Session>(d)));
-    });
+    },
+  );
 }
 
 /* ---------------------------- parking lot -------------------------- */
@@ -139,8 +169,9 @@ export async function addParkingItem(
   uid: string,
   data: Omit<ParkingLotItem, "id">,
 ): Promise<string> {
-  const ref = parkingLotCol(uid).doc();
-  await ref.set(data);
+  if (!isFirebaseConfigured) return demo.addParkingItemDemo(data);
+  const ref = doc(parkingLotCol(uid));
+  await setDoc(ref, data);
   return ref.id;
 }
 
@@ -149,20 +180,23 @@ export function updateParkingItem(
   id: string,
   patch: Partial<Omit<ParkingLotItem, "id">>,
 ): Promise<void> {
-  return parkingLotCol(uid).doc(id).update(patch);
+  if (!isFirebaseConfigured) return demo.updateParkingItemDemo(id, patch);
+  return updateDoc(doc(parkingLotCol(uid), id), patch);
 }
 
 export function observeOpenParking(
   uid: string,
   cb: (items: ParkingLotItem[]) => void,
 ): Unsub {
-  return parkingLotCol(uid)
-    .where("status", "==", "open")
-    .onSnapshot((snap) => {
+  if (!isFirebaseConfigured) return demo.observeOpenParkingDemo(cb);
+  return onSnapshot(
+    query(parkingLotCol(uid), where("status", "==", "open")),
+    (snap) => {
       const items = snap.docs.map((d) => fromDoc<ParkingLotItem>(d));
       items.sort((a, b) => b.createdAt - a.createdAt);
       cb(items);
-    });
+    },
+  );
 }
 
 /* ------------------------------ user ------------------------------- */
@@ -171,5 +205,6 @@ export async function ensureUserDoc(
   uid: string,
   profile: { displayName: string | null; email: string | null; photoURL: string | null },
 ): Promise<void> {
-  await userDoc(uid).set({ profile }, { merge: true });
+  if (!isFirebaseConfigured) return; // demo user has no doc
+  await setDoc(userDoc(uid), { profile }, { merge: true });
 }

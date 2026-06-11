@@ -1,61 +1,91 @@
-import auth, {
-  type FirebaseAuthTypes,
-} from "@react-native-firebase/auth";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import Constants from "expo-constants";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from "firebase/auth";
 import { fbAuth } from "./firebase";
+import { isFirebaseConfigured } from "./config";
+import {
+  onAuthChangedDemo,
+  signInDemo as demoSignIn,
+  signOutDemo,
+} from "./demo";
 import { bootstrapDomains, ensureUserDoc } from "./repositories";
 
-const webClientId =
-  (Constants.expoConfig?.extra?.googleWebClientId as string | null) ?? undefined;
+export { isFirebaseConfigured } from "./config";
 
-let configured = false;
+/**
+ * The app-facing user shape — the only fields the UI reads. Decouples consumers
+ * from the Firebase `User` type so demo mode (no Firebase at all) can supply one.
+ */
+export interface AuthUser {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
 
-/** Call once at startup before any sign-in attempt. */
-export function configureGoogleSignIn(): void {
-  if (configured) return;
-  GoogleSignin.configure({ webClientId });
-  configured = true;
+function toAuthUser(u: User): AuthUser {
+  return {
+    uid: u.uid,
+    displayName: u.displayName,
+    email: u.email,
+    photoURL: u.photoURL,
+  };
 }
 
 /**
- * Google → Firebase sign-in. Gets a Google idToken, exchanges it for a Firebase
- * credential, then bootstraps the user's doc + default lanes on first login.
+ * Interim auth: email/password via the Firebase JS SDK so the app runs in Expo Go
+ * (Google Sign-In is a native module / needs a custom-scheme dev build — deferred).
+ * With no Firebase config, the sign-in screen offers demo mode instead (below).
+ * Every entry point bootstraps the user's doc + default lanes (idempotent).
  */
-export async function signInWithGoogle(): Promise<FirebaseAuthTypes.User> {
-  configureGoogleSignIn();
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-  const response = await GoogleSignin.signIn();
-  const idToken = response.data?.idToken;
-  if (!idToken) {
-    throw new Error("Google sign-in returned no idToken");
-  }
-
-  const credential = auth.GoogleAuthProvider.credential(idToken);
-  const { user } = await fbAuth.signInWithCredential(credential);
-
+async function afterAuth(user: AuthUser): Promise<AuthUser> {
   await ensureUserDoc(user.uid, {
     displayName: user.displayName,
     email: user.email,
     photoURL: user.photoURL,
   });
   await bootstrapDomains(user.uid);
-
   return user;
 }
 
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+): Promise<AuthUser> {
+  if (!isFirebaseConfigured) throw new Error("Firebase is not configured — set EXPO_PUBLIC_FIREBASE_* in .env (see .env.example) or use demo mode.");
+  const { user } = await createUserWithEmailAndPassword(fbAuth!, email, password);
+  return afterAuth(toAuthUser(user));
+}
+
+export async function signInWithEmail(
+  email: string,
+  password: string,
+): Promise<AuthUser> {
+  if (!isFirebaseConfigured) throw new Error("Firebase is not configured — set EXPO_PUBLIC_FIREBASE_* in .env (see .env.example) or use demo mode.");
+  const { user } = await signInWithEmailAndPassword(fbAuth!, email, password);
+  return afterAuth(toAuthUser(user));
+}
+
+/** Demo mode: fake local user + in-memory data (see demo.ts). No Firebase needed. */
+export async function signInAsDemo(): Promise<AuthUser> {
+  return afterAuth(demoSignIn());
+}
+
 export async function signOutEverywhere(): Promise<void> {
-  try {
-    await GoogleSignin.signOut();
-  } catch {
-    /* not signed in with Google; ignore */
+  if (!isFirebaseConfigured) {
+    signOutDemo();
+    return;
   }
-  await fbAuth.signOut();
+  await signOut(fbAuth!);
 }
 
 export function onAuthChanged(
-  cb: (user: FirebaseAuthTypes.User | null) => void,
+  cb: (user: AuthUser | null) => void,
 ): () => void {
-  return fbAuth.onAuthStateChanged(cb);
+  if (!isFirebaseConfigured) return onAuthChangedDemo(cb);
+  return onAuthStateChanged(fbAuth!, (u) => cb(u ? toAuthUser(u) : null));
 }

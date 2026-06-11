@@ -1,12 +1,11 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { FirebaseAuthTypes } from "@react-native-firebase/auth";
-import { onAuthChanged } from "@/src/firebase/auth";
+import { onAuthChanged, type AuthUser } from "@/src/firebase/auth";
 
 interface AuthState {
-  user: FirebaseAuthTypes.User | null;
+  user: AuthUser | null;
   initializing: boolean;
-  setUser: (user: FirebaseAuthTypes.User | null) => void;
+  setUser: (user: AuthUser | null) => void;
 }
 
 export const useAuth = create<AuthState>((set) => ({

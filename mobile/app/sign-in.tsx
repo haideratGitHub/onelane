@@ -1,22 +1,58 @@
 import { useState } from "react";
 import { View, Text, Alert } from "react-native";
 import { router } from "expo-router";
-import { Screen, Button, Heading, Muted } from "@/src/components/ui";
-import { signInWithGoogle } from "@/src/firebase/auth";
+import {
+  Screen,
+  Button,
+  Heading,
+  Muted,
+  Field,
+  Label,
+  Card,
+} from "@/src/components/ui";
+import {
+  isFirebaseConfigured,
+  signInAsDemo,
+  signInWithEmail,
+  signUpWithEmail,
+} from "@/src/firebase/auth";
 
 export default function SignIn() {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function onGoogle() {
+  const isSignup = mode === "signup";
+
+  async function onSubmit() {
+    if (!email.trim() || !password) {
+      Alert.alert("Missing details", "Enter your email and password.");
+      return;
+    }
     setLoading(true);
     try {
-      await signInWithGoogle();
+      if (isSignup) {
+        await signUpWithEmail(email.trim(), password);
+      } else {
+        await signInWithEmail(email.trim(), password);
+      }
       router.replace("/");
     } catch (e) {
       Alert.alert(
-        "Sign-in failed",
+        isSignup ? "Sign-up failed" : "Sign-in failed",
         e instanceof Error ? e.message : "Please try again.",
       );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onDemo() {
+    setLoading(true);
+    try {
+      await signInAsDemo();
+      router.replace("/");
     } finally {
       setLoading(false);
     }
@@ -40,16 +76,79 @@ export default function SignIn() {
           </Muted>
         </View>
 
-        <View className="mt-10">
-          <Button
-            title={loading ? "Signing in…" : "Continue with Google"}
-            onPress={onGoogle}
-            disabled={loading}
-          />
-          <View className="mt-3">
+        {isFirebaseConfigured ? (
+          <View className="mt-10 gap-4">
+            <View>
+              <Label>Email</Label>
+              <Field
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                editable={!loading}
+              />
+            </View>
+            <View>
+              <Label>Password</Label>
+              <Field
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete={isSignup ? "new-password" : "password"}
+                editable={!loading}
+              />
+            </View>
+
+            <Button
+              title={
+                loading
+                  ? isSignup
+                    ? "Creating account…"
+                    : "Signing in…"
+                  : isSignup
+                    ? "Create account"
+                    : "Sign in"
+              }
+              onPress={onSubmit}
+              disabled={loading}
+            />
+            <Button
+              title={
+                isSignup
+                  ? "Have an account? Sign in"
+                  : "New here? Create an account"
+              }
+              variant="ghost"
+              onPress={() => setMode(isSignup ? "signin" : "signup")}
+              disabled={loading}
+            />
             <Muted>We only use your account to sync your lanes across devices.</Muted>
           </View>
-        </View>
+        ) : (
+          <View className="mt-10 gap-4">
+            <Card>
+              <Text className="font-semibold text-white">Demo mode</Text>
+              <View className="mt-1">
+                <Muted>
+                  Firebase isn&apos;t configured yet, so nothing is saved or synced —
+                  explore with sample data. To enable real accounts, fill the
+                  EXPO_PUBLIC_FIREBASE_* values in mobile/.env (see .env.example)
+                  and restart.
+                </Muted>
+              </View>
+            </Card>
+            <Button
+              title={loading ? "Starting…" : "Explore the demo"}
+              onPress={onDemo}
+              disabled={loading}
+            />
+          </View>
+        )}
       </View>
     </Screen>
   );

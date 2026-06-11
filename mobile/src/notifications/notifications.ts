@@ -14,7 +14,10 @@ import {
  */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // SDK 54 split the old shouldShowAlert into banner (heads-up) + list
+    // (notification center) — keep both on so check-ins are never missed.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),

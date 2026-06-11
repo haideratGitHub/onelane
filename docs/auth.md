@@ -1,104 +1,121 @@
 # Authentication Module
 
-Google Sign-In → Firebase Auth, the first-login bootstrap, the auth gate that
-protects the app, and sign-out.
+Email/password sign-in via the **Firebase JS SDK**, the first-login bootstrap, the
+auth gate that protects the app, and sign-out.
+
+> **⚠️ Interim setup.** This module was migrated off native modules
+> (`@react-native-firebase`, `@react-native-google-signin`) to the **pure-JS Firebase
+> SDK** with **email/password** auth so the app runs in **Expo Go** (no custom dev
+> build). **Google Sign-In is deferred** — it's a native module / needs a custom-scheme
+> dev build (Expo removed the auth proxy, so Google OAuth can't redirect in Expo Go).
+> Re-adding native Google in a dev build is the planned "more robust" follow-up. See
+> [architecture.md](architecture.md) §3.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `mobile/src/firebase/firebase.ts` | Exposes the `fbAuth` (and `db`) singletons from React Native Firebase. |
-| `mobile/src/firebase/auth.ts` | `configureGoogleSignIn`, `signInWithGoogle`, `signOutEverywhere`, `onAuthChanged`. |
-| `mobile/src/store/useAuth.ts` | Zustand store holding `{ user, initializing }` + `useAuthListener()`. |
-| `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, calls `configureGoogleSignIn()`, gates the splash on `initializing`. |
-| `mobile/app/sign-in.tsx` | The sign-in screen ("Continue with Google"). |
+| `mobile/src/firebase/config.ts` | Reads `EXPO_PUBLIC_FIREBASE_*` env → `firebaseConfig` + the `isFirebaseConfigured` flag. |
+| `mobile/src/firebase/firebase.ts` | **Conditionally** initializes the Firebase JS SDK (only when configured — exports are `null` otherwise, no crash); `fbAuth` (AsyncStorage persistence) + `db` (long-polling Firestore). |
+| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`; defines the app-facing **`AuthUser`** type. |
+| `mobile/src/firebase/demo.ts` | **Demo mode**: in-memory auth + data backend with seeded sample data, used when Firebase isn't configured. |
+| `mobile/src/store/useAuth.ts` | Zustand store holding `{ user, initializing }` + `useAuthListener()`. `user` is **`AuthUser`** (decoupled from Firebase types). |
+| `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, gates the splash on `initializing`. |
+| `mobile/app/sign-in.tsx` | The sign-in screen: email + password form with a Sign in / Create account toggle. |
 | `mobile/app/(app)/_layout.tsx` | **Auth gate**: redirects to `/sign-in` when there's no user. |
 | `mobile/app/(app)/plan.tsx` | Hosts the "Sign out" button (bottom of the Plan screen). |
-| `mobile/app.config.ts` | Native plugin config + `extra.googleWebClientId` + iOS URL scheme. |
-| `mobile/.env.example` | The env vars the build reads. |
+| `mobile/app.config.ts` | Expo config — no native auth plugins anymore (Firebase is configured at runtime from env). |
+| `mobile/.env.example` | The `EXPO_PUBLIC_FIREBASE_*` env vars the app reads. |
 
 ## Data touched
 
 - **Firestore `users/{uid}`** — `{ profile: { displayName, email, photoURL } }`,
-  written (merged) on every sign-in by `ensureUserDoc` (in `repositories.ts`).
+  written (merged) on every sign-in/up by `ensureUserDoc` (in `repositories.ts`).
+  (For email/password, `displayName`/`photoURL` are typically `null`.)
 - **`users/{uid}/domains/*`** — seeded once on first login by `bootstrapDomains`
   (writes `DEFAULT_DOMAINS`). See [weekly-plan.md](weekly-plan.md) / [data-firestore.md](data-firestore.md).
 
 ## End-to-end flow
 
-1. **App launch** (`app/_layout.tsx`): `configureGoogleSignIn()` runs once;
-   `useAuthListener()` subscribes to `onAuthStateChanged`. While
-   `useAuth.initializing` is true the splash stays up and the root renders `null`.
+1. **App launch** (`app/_layout.tsx`): `useAuthListener()` subscribes to
+   `onAuthStateChanged`. While `useAuth.initializing` is true the splash stays up and
+   the root renders `null`. The Firebase JS SDK restores the persisted session from
+   AsyncStorage.
 2. **First auth callback** sets `user` (or `null`) and flips `initializing=false`;
    splash hides.
 3. **Routing**: `app/index` doesn't exist; `/` resolves to `(app)/index`, whose
    layout (`(app)/_layout.tsx`) checks `useAuth.user`. **No user → `<Redirect href="/sign-in" />`.**
-4. **Sign-in screen** → user taps "Continue with Google" → `signInWithGoogle()`:
-   - `GoogleSignin.hasPlayServices()` then `GoogleSignin.signIn()` → returns
-     `response.data.idToken` (google-signin **v13** shape).
-   - `auth.GoogleAuthProvider.credential(idToken)` → `fbAuth.signInWithCredential(credential)`.
-   - `ensureUserDoc(uid, profile)` (merge) + `bootstrapDomains(uid)` (idempotent).
+4. **Sign-in screen** → user enters email + password and taps Sign in / Create account:
+   - `signInWithEmail` → `signInWithEmailAndPassword(fbAuth, …)`, or
+   - `signUpWithEmail` → `createUserWithEmailAndPassword(fbAuth, …)`.
+   - Both then run `ensureUserDoc(uid, profile)` (merge) + `bootstrapDomains(uid)`
+     (idempotent) via the shared `afterAuth` helper.
 5. `onAuthStateChanged` fires → `useAuth.user` set → `(app)` gate now renders the
    Tabs; `useAppSync(uid)` (in the same layout) starts the Firestore listeners.
-6. **Sign-out** (Plan screen → `signOutEverywhere`): `GoogleSignin.signOut()` (best
-   effort) + `fbAuth.signOut()` → listener sets `user=null` → gate redirects to
-   `/sign-in`.
+6. **Sign-out** (Plan screen → `signOutEverywhere`): `signOut(fbAuth)` → listener sets
+   `user=null` → gate redirects to `/sign-in`.
 
-## Configuration & prerequisites (must do before it works)
+## Demo mode (no Firebase config)
 
-Google Sign-In + RN Firebase are **native** → **custom dev build required** (not Expo
-Go). Before the first `expo run:ios|android`:
+When the `EXPO_PUBLIC_FIREBASE_*` env is **absent**, the app must not crash —
+`firebase.ts` skips initialization entirely (`fbAuth`/`db` are `null`) and the
+sign-in screen swaps the email form for a notice + **"Explore the demo"** button.
+`signInAsDemo()` sets a fake local `AuthUser` (`uid:"demo"`) and the repositories
+delegate to `demo.ts`: an in-memory backend with the same observe/write contracts,
+seeded (idempotently, via `bootstrapDomains`) with the default lanes, a few completed
+sessions, and open parking items. Everything is walkable; nothing persists or syncs —
+data resets on reload. Auth ops that genuinely need Firebase (`signInWithEmail`,
+`signUpWithEmail`) throw a descriptive error instead of `auth/invalid-api-key`.
 
-1. **Firebase config files** in `mobile/`:
-   - iOS: `GoogleService-Info.plist` (path overridable via `GOOGLE_SERVICES_PLIST`).
-   - Android: `google-services.json` (overridable via `GOOGLE_SERVICES_JSON`).
-   Both are **gitignored**. RN Firebase auto-initializes from these — there is no
-   `initializeApp()` call in code.
-2. **Env** (`mobile/.env`, from `.env.example`):
-   - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` — the **Web** OAuth client ID (used to mint
-     the idToken we exchange for a Firebase credential; required on both platforms).
-     Surfaced to JS via `app.config.ts` → `extra.googleWebClientId` → read in
-     `auth.ts` through `expo-constants`.
-   - `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` — reversed iOS client id, injected into the
-     `@react-native-google-signin/google-signin` config plugin in `app.config.ts`.
-3. **Enable Google** as a sign-in provider in the Firebase console.
-4. **Deploy security rules** (`mobile/firestore.rules`) so `users/{uid}` is
-   writable only by that uid.
+## Configuration & prerequisites (for real accounts)
+
+Pure-JS Firebase SDK → **runs in Expo Go** (`npm run start`, scan the QR). Before
+real sign-in works (otherwise demo mode):
+
+1. **Firebase Web app config** in `mobile/.env` (from `.env.example`) — Firebase
+   console → Project settings → Your apps → **Web** app:
+   `EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_STORAGE_BUCKET`,
+   `_MESSAGING_SENDER_ID`, `_APP_ID`. Read at runtime in `firebase.ts` via
+   `process.env` (Expo inlines `EXPO_PUBLIC_*`). Replaces the old native
+   `GoogleService-Info.plist` auto-init.
+2. **Enable Email/Password** in Firebase console → Authentication → Sign-in method.
+3. **Deploy security rules** (`mobile/firestore.rules`) so `users/{uid}` is writable
+   only by that uid: `firebase deploy --only firestore:rules` (rules unchanged).
 
 ## Features / behaviors
 
-- **Single provider: Google.** No email/password, no Apple sign-in yet.
+- **Single provider (interim): email/password.** No Google/Apple/social yet.
 - **First-login bootstrap** seeds default lanes so the app isn't empty.
 - **`onAuthChanged`** is the single source of auth truth; everything reacts to it.
 - **Splash gating** prevents a sign-in flash before Firebase restores the session.
+- **AsyncStorage persistence** keeps the user signed in across reloads/relaunches.
 
 ## Caveats / gotchas
 
-- **`response.data?.idToken`** — google-signin v13 nests the token under `.data`.
-  Older snippets use `response.idToken` (v12 and earlier) — don't regress to that.
-- **No dev build = instant failure.** In Expo Go these native modules are undefined.
-- **`bootstrapDomains` isn't transactional.** It checks `domains.limit(1)` then
-  batch-writes; two simultaneous first-logins on two devices could double-seed. Low
-  risk for a personal app; if it matters, move to a transaction or a `bootstrapped`
-  flag on the user doc.
-- **`webClientId` may be `undefined`** if env isn't set → `GoogleSignin.configure`
-  gets `undefined` and sign-in fails with an opaque error. Check the env first when
-  debugging sign-in.
+- **`getReactNativePersistence` is only in firebase/auth's RN build** — the default
+  (browser) types don't declare it, so `firebase.ts` has a `// @ts-ignore` on that
+  import. Metro resolves the RN build at runtime; don't "fix" the ignore away.
+- **`initializeAuth`/`initializeFirestore` run once** — `firebase.ts` wraps each in a
+  try/catch falling back to `getAuth`/`getFirestore` so Fast Refresh doesn't crash.
 - **`initializing` must flip exactly once.** `setUser` sets `initializing=false`;
   don't add a second code path that leaves it stuck true (splash would hang).
 - **Sign-out is in an odd place** (bottom of Plan). If you add a Settings screen,
   move it there and update [weekly-plan.md](weekly-plan.md).
+- **Error surfacing** — sign-in/up errors are shown via `Alert` with the Firebase
+  error message (e.g. wrong-password, email-already-in-use). Fine for the interim app.
 
 ## Known gaps
 
-- No account deletion, no re-auth, no profile editing.
-- No Apple sign-in (will be needed for iOS App Store review if you offer other social
-  logins — currently only Google, which is allowed alone).
+- **Google sign-in deferred** — returns with a native dev build (the "more robust"
+  follow-up).
+- No password reset, account deletion, re-auth, or profile editing.
+- No Apple sign-in.
 - User settings (week start, quiet hours) aren't loaded/saved (see [architecture.md](architecture.md) §10).
 
 ---
 
 ## 📌 Keeping this doc in sync (read me, Claude)
 Update this when you touch sign-in/out, the auth gate, the bootstrap, the
-`users/{uid}` shape, or the native/env config for auth. Keep the env var names and
-the google-signin response shape exact. Full protocol in [README.md](README.md).
+`users/{uid}` shape, the Firebase JS SDK init, or the env config for auth. If/when
+Google sign-in is re-added (dev build), document the native config + env it needs.
+Full protocol in [README.md](README.md).

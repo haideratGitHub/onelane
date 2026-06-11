@@ -1,3 +1,9 @@
+import {
+  collection,
+  doc,
+  type CollectionReference,
+  type DocumentReference,
+} from "firebase/firestore";
 import { db } from "./firebase";
 
 /**
@@ -8,11 +14,18 @@ import { db } from "./firebase";
  *   users/{uid}/weeks/{weekId}
  *   users/{uid}/sessions/{sessionId}
  *   users/{uid}/parkingLot/{itemId}
+ *
+ * `db!`: these builders are only reached from repositories.ts branches that run
+ * when Firebase IS configured (demo mode short-circuits before them), so db is
+ * never null here.
  */
-export const userDoc = (uid: string) => db.collection("users").doc(uid);
+export const userDoc = (uid: string): DocumentReference => doc(db!, "users", uid);
 
-export const domainsCol = (uid: string) => userDoc(uid).collection("domains");
-export const weeksCol = (uid: string) => userDoc(uid).collection("weeks");
-export const sessionsCol = (uid: string) => userDoc(uid).collection("sessions");
-export const parkingLotCol = (uid: string) =>
-  userDoc(uid).collection("parkingLot");
+export const domainsCol = (uid: string): CollectionReference =>
+  collection(db!, "users", uid, "domains");
+export const weeksCol = (uid: string): CollectionReference =>
+  collection(db!, "users", uid, "weeks");
+export const sessionsCol = (uid: string): CollectionReference =>
+  collection(db!, "users", uid, "sessions");
+export const parkingLotCol = (uid: string): CollectionReference =>
+  collection(db!, "users", uid, "parkingLot");
