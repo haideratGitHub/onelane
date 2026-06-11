@@ -104,6 +104,9 @@ export default function SessionScreen() {
           </Text>
           <Text className="mt-2 text-sm text-fog">
             {paused ? "Paused" : "Focused"}
+            {activeSession.plannedDurationMin
+              ? ` · planned ${activeSession.plannedDurationMin} min`
+              : ""}
           </Text>
         </View>
 

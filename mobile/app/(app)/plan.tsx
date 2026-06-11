@@ -1,16 +1,18 @@
 import { View, Text, Pressable, ScrollView } from "react-native";
+import { router } from "expo-router";
 import { Screen, Heading, Muted, Card, Label, Button } from "@/src/components/ui";
 import { useApp } from "@/src/store/useApp";
 import { formatHours } from "@/src/utils/format";
-import { signOutEverywhere } from "@/src/firebase/auth";
+import { MAX_REASONABLE_WEEK_HOURS } from "@/src/domain";
 
 export default function Plan() {
   const domains = useApp((s) => s.domains);
   const setDomainTarget = useApp((s) => s.setDomainTarget);
 
   const total = domains.reduce((sum, d) => sum + d.weeklyTargetHours, 0);
-  // Gentle right-sizing nudge — the brief's ~81h plan should be questioned, not executed blindly.
-  const overloaded = total > 60;
+  // Gentle right-sizing nudge — an ambitious plan should be questioned, not
+  // executed blindly.
+  const overloaded = total > MAX_REASONABLE_WEEK_HOURS;
 
   return (
     <Screen>
@@ -42,41 +44,57 @@ export default function Plan() {
         <View className="mt-6">
           <Label>Lanes</Label>
           {domains.map((d) => (
-            <Card key={d.id} className="mb-3">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2">
-                  <View
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: d.color }}
-                  />
-                  <Text className="text-base font-semibold text-white">
-                    {d.icon} {d.name}
-                  </Text>
+            <Pressable key={d.id} onPress={() => router.push(`/lane/${d.id}`)}>
+              <Card className="mb-3">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1 flex-row items-center gap-2 pr-2">
+                    <View
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: d.color }}
+                    />
+                    <Text
+                      className="shrink text-base font-semibold text-white"
+                      numberOfLines={1}
+                    >
+                      {d.icon} {d.name}
+                    </Text>
+                    <Text className="text-fog">›</Text>
+                  </View>
+                  <View className="flex-row items-center gap-3">
+                    <Stepper
+                      label="−"
+                      onPress={() => setDomainTarget(d.id, d.weeklyTargetHours - 1)}
+                    />
+                    <Text className="w-12 text-center text-lg font-bold tabular-nums text-white">
+                      {formatHours(d.weeklyTargetHours)}
+                    </Text>
+                    <Stepper
+                      label="＋"
+                      onPress={() => setDomainTarget(d.id, d.weeklyTargetHours + 1)}
+                    />
+                  </View>
                 </View>
-                <View className="flex-row items-center gap-3">
-                  <Stepper
-                    label="−"
-                    onPress={() => setDomainTarget(d.id, d.weeklyTargetHours - 1)}
-                  />
-                  <Text className="w-12 text-center text-lg font-bold tabular-nums text-white">
-                    {formatHours(d.weeklyTargetHours)}
-                  </Text>
-                  <Stepper
-                    label="＋"
-                    onPress={() => setDomainTarget(d.id, d.weeklyTargetHours + 1)}
-                  />
-                </View>
-              </View>
-            </Card>
+              </Card>
+            </Pressable>
           ))}
-        </View>
 
-        <View className="mt-8">
+          {domains.length === 0 && (
+            <Card className="mb-3">
+              <Muted>
+                No lanes yet. Each lane is one life domain you protect time for —
+                add your first below.
+              </Muted>
+            </Card>
+          )}
+
           <Button
-            title="Sign out"
+            title="＋ Add lane"
             variant="ghost"
-            onPress={() => signOutEverywhere()}
+            onPress={() => router.push("/lane/new")}
           />
+          <View className="mt-2">
+            <Muted>Tap a lane to rename, restyle, or archive it.</Muted>
+          </View>
         </View>
       </ScrollView>
     </Screen>

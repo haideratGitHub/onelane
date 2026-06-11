@@ -117,12 +117,12 @@ After domain-logic changes always run `npm test`. After any TS change, run
 ## Current known gaps (don't assume these exist)
 
 Auth is **interim email/password** (Google Sign-In deferred to a future dev build —
-see [docs/auth.md](docs/auth.md)); settings aren't persisted (week start / quiet hours
-are defaults); only the current week is loaded (no week switcher, streaks not surfaced
-in UI); no lane add/archive UI (target editing only); notification action buttons
-exist but no response listener handles taps; single-active-session has no hard guard;
-store CTA links on the landing page are `#` placeholders. See each module doc's
-"Known gaps".
+see [docs/auth.md](docs/auth.md)); only the current week is loaded (no week switcher,
+streaks not surfaced in UI); lane CRUD exists but no reorder/unarchive UI;
+notification action buttons exist but no response listener handles taps;
+single-active-session has no hard guard; store CTA links on the landing page are `#`
+placeholders. See each module doc's "Known gaps". (Settings **are** persisted now —
+`users/{uid}.settings`, edited on the Profile tab.)
 
 ---
 

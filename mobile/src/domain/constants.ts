@@ -9,6 +9,12 @@ export const WIN_THRESHOLD = 0.7;
 /** Default soft length of a focus block, used to schedule the block-edge nudge. */
 export const DEFAULT_BLOCK_MINUTES = 50;
 
+/**
+ * Above this weekly total the Plan screen nudges toward right-sizing — an
+ * ambitious plan should be questioned, not executed blindly. Encoded once, here.
+ */
+export const MAX_REASONABLE_WEEK_HOURS = 60;
+
 export const DEFAULT_SETTINGS: UserSettings = {
   weekStartsOn: 1, // Monday
   timezone: "UTC",

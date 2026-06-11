@@ -8,7 +8,6 @@ import {
   Muted,
   Field,
   Label,
-  Card,
 } from "@/src/components/ui";
 import {
   isFirebaseConfigured,
@@ -76,79 +75,75 @@ export default function SignIn() {
           </Muted>
         </View>
 
-        {isFirebaseConfigured ? (
-          <View className="mt-10 gap-4">
-            <View>
-              <Label>Email</Label>
-              <Field
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                editable={!loading}
-              />
+        <View className="mt-10 gap-4">
+          {!isFirebaseConfigured && (
+            <View className="rounded-lg border border-line/30 bg-line/10 px-3 py-2">
+              <Text className="text-xs text-line">
+                Demo mode — any email and password works. Your account stays on
+                this device and resets on reload.
+              </Text>
             </View>
-            <View>
-              <Label>Password</Label>
-              <Field
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete={isSignup ? "new-password" : "password"}
-                editable={!loading}
-              />
-            </View>
+          )}
 
-            <Button
-              title={
-                loading
-                  ? isSignup
-                    ? "Creating account…"
-                    : "Signing in…"
-                  : isSignup
-                    ? "Create account"
-                    : "Sign in"
-              }
-              onPress={onSubmit}
-              disabled={loading}
+          <View>
+            <Label>Email</Label>
+            <Field
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              editable={!loading}
             />
-            <Button
-              title={
-                isSignup
-                  ? "Have an account? Sign in"
-                  : "New here? Create an account"
-              }
-              variant="ghost"
-              onPress={() => setMode(isSignup ? "signin" : "signup")}
-              disabled={loading}
-            />
-            <Muted>We only use your account to sync your lanes across devices.</Muted>
           </View>
-        ) : (
-          <View className="mt-10 gap-4">
-            <Card>
-              <Text className="font-semibold text-white">Demo mode</Text>
-              <View className="mt-1">
-                <Muted>
-                  Firebase isn&apos;t configured yet, so nothing is saved or synced —
-                  explore with sample data. To enable real accounts, fill the
-                  EXPO_PUBLIC_FIREBASE_* values in mobile/.env (see .env.example)
-                  and restart.
-                </Muted>
-              </View>
-            </Card>
+          <View>
+            <Label>Password</Label>
+            <Field
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete={isSignup ? "new-password" : "password"}
+              editable={!loading}
+            />
+          </View>
+
+          <Button
+            title={
+              loading
+                ? isSignup
+                  ? "Creating account…"
+                  : "Signing in…"
+                : isSignup
+                  ? "Create account"
+                  : "Sign in"
+            }
+            onPress={onSubmit}
+            disabled={loading}
+          />
+          <Button
+            title={
+              isSignup
+                ? "Have an account? Sign in"
+                : "New here? Create an account"
+            }
+            variant="ghost"
+            onPress={() => setMode(isSignup ? "signin" : "signup")}
+            disabled={loading}
+          />
+          {!isFirebaseConfigured && (
             <Button
-              title={loading ? "Starting…" : "Explore the demo"}
+              title="Skip — explore with sample data"
+              variant="ghost"
               onPress={onDemo}
               disabled={loading}
             />
-          </View>
-        )}
+          )}
+          <Muted>We only use your account to sync your lanes across devices.</Muted>
+        </View>
       </View>
     </Screen>
   );

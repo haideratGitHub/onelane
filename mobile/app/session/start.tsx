@@ -39,6 +39,18 @@ export default function StartSession() {
 
         <View className="mt-6">
           <Label>Lane</Label>
+          {domains.length === 0 && (
+            <View className="mb-2">
+              <Muted>No lanes yet — create one first.</Muted>
+              <View className="mt-3">
+                <Button
+                  title="＋ Add a lane"
+                  variant="ghost"
+                  onPress={() => router.replace("/lane/new")}
+                />
+              </View>
+            </View>
+          )}
           <View className="flex-row flex-wrap gap-2">
             {domains.map((d) => {
               const selected = d.id === domainId;

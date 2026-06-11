@@ -25,3 +25,19 @@ export const LANE_PALETTE = [
 export function laneColor(order: number): string {
   return LANE_PALETTE[order % LANE_PALETTE.length] as string;
 }
+
+/** Curated icon choices for the lane editor (Domain.icon is an emoji string). */
+export const LANE_ICONS = [
+  "💼",
+  "📈",
+  "🚀",
+  "📚",
+  "🏋️",
+  "🎨",
+  "🧠",
+  "🏠",
+  "❤️",
+  "✍️",
+  "🎵",
+  "🌱",
+] as const;

@@ -63,6 +63,10 @@ Review screen:
 - **Targets are live, not snapshotted** (see [weekly-plan.md](weekly-plan.md)). If a
   user lowers a target mid-week, more lanes may suddenly "win". That's currently the
   intended behavior; revisit if product wants locked plans.
+- **Archived lanes still appear** when they have hours logged this week:
+  `summarizeWeek` unions actuals with targets, and lane metadata resolves through
+  `useApp.domainById` → `domainsAll` (all lanes incl. archived), so the row keeps its
+  name/icon/color with `targetHours: 0` — honest history, no win/loss distortion.
 
 ## Known gaps
 

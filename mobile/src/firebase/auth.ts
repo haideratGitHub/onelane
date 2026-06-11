@@ -9,6 +9,7 @@ import { fbAuth } from "./firebase";
 import { isFirebaseConfigured } from "./config";
 import {
   onAuthChangedDemo,
+  seedDemoData,
   signInDemo as demoSignIn,
   signOutDemo,
 } from "./demo";
@@ -52,11 +53,25 @@ async function afterAuth(user: AuthUser): Promise<AuthUser> {
   return user;
 }
 
+/**
+ * Demo fallback for the real onboarding form: with no Firebase config, any
+ * credentials sign in a local fake account named after the email, so the full
+ * sign-in/sign-up flow is walkable. Routing through afterAuth keeps the
+ * default-lanes bootstrap on the path (clean first-run — no sample content).
+ */
+function profileFromEmail(email: string): Partial<AuthUser> {
+  const name = email.split("@")[0] ?? "you";
+  return {
+    displayName: name.charAt(0).toUpperCase() + name.slice(1),
+    email,
+  };
+}
+
 export async function signUpWithEmail(
   email: string,
   password: string,
 ): Promise<AuthUser> {
-  if (!isFirebaseConfigured) throw new Error("Firebase is not configured — set EXPO_PUBLIC_FIREBASE_* in .env (see .env.example) or use demo mode.");
+  if (!isFirebaseConfigured) return afterAuth(demoSignIn(profileFromEmail(email)));
   const { user } = await createUserWithEmailAndPassword(fbAuth!, email, password);
   return afterAuth(toAuthUser(user));
 }
@@ -65,13 +80,18 @@ export async function signInWithEmail(
   email: string,
   password: string,
 ): Promise<AuthUser> {
-  if (!isFirebaseConfigured) throw new Error("Firebase is not configured — set EXPO_PUBLIC_FIREBASE_* in .env (see .env.example) or use demo mode.");
+  if (!isFirebaseConfigured) return afterAuth(demoSignIn(profileFromEmail(email)));
   const { user } = await signInWithEmailAndPassword(fbAuth!, email, password);
   return afterAuth(toAuthUser(user));
 }
 
-/** Demo mode: fake local user + in-memory data (see demo.ts). No Firebase needed. */
+/**
+ * "Explore with sample data": demo user + a fully seeded world (sessions,
+ * parking) so every screen has content. Seeding here is idempotent, so the
+ * bootstrapDomains call inside afterAuth becomes a no-op.
+ */
 export async function signInAsDemo(): Promise<AuthUser> {
+  seedDemoData({ withSamples: true });
   return afterAuth(demoSignIn());
 }
 

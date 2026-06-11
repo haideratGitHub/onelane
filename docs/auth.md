@@ -23,7 +23,7 @@ auth gate that protects the app, and sign-out.
 | `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, gates the splash on `initializing`. |
 | `mobile/app/sign-in.tsx` | The sign-in screen: email + password form with a Sign in / Create account toggle. |
 | `mobile/app/(app)/_layout.tsx` | **Auth gate**: redirects to `/sign-in` when there's no user. |
-| `mobile/app/(app)/plan.tsx` | Hosts the "Sign out" button (bottom of the Plan screen). |
+| `mobile/app/(app)/profile.tsx` | Profile tab: identity card, app settings, and the "Sign out" button (with confirmation). |
 | `mobile/app.config.ts` | Expo config — no native auth plugins anymore (Firebase is configured at runtime from env). |
 | `mobile/.env.example` | The `EXPO_PUBLIC_FIREBASE_*` env vars the app reads. |
 
@@ -52,20 +52,25 @@ auth gate that protects the app, and sign-out.
      (idempotent) via the shared `afterAuth` helper.
 5. `onAuthStateChanged` fires → `useAuth.user` set → `(app)` gate now renders the
    Tabs; `useAppSync(uid)` (in the same layout) starts the Firestore listeners.
-6. **Sign-out** (Plan screen → `signOutEverywhere`): `signOut(fbAuth)` → listener sets
+6. **Sign-out** (Profile tab → confirmation Alert → `signOutEverywhere`): `signOut(fbAuth)` → listener sets
    `user=null` → gate redirects to `/sign-in`.
 
 ## Demo mode (no Firebase config)
 
 When the `EXPO_PUBLIC_FIREBASE_*` env is **absent**, the app must not crash —
-`firebase.ts` skips initialization entirely (`fbAuth`/`db` are `null`) and the
-sign-in screen swaps the email form for a notice + **"Explore the demo"** button.
-`signInAsDemo()` sets a fake local `AuthUser` (`uid:"demo"`) and the repositories
-delegate to `demo.ts`: an in-memory backend with the same observe/write contracts,
-seeded (idempotently, via `bootstrapDomains`) with the default lanes, a few completed
-sessions, and open parking items. Everything is walkable; nothing persists or syncs —
-data resets on reload. Auth ops that genuinely need Firebase (`signInWithEmail`,
-`signUpWithEmail`) throw a descriptive error instead of `auth/invalid-api-key`.
+`firebase.ts` skips initialization entirely (`fbAuth`/`db` are `null`) and everything
+delegates to `demo.ts` (in-memory backend, same observe/write contracts). The
+sign-in screen still shows the **real onboarding form** (with a small demo banner):
+`signInWithEmail`/`signUpWithEmail` fall back to `demoSignIn(profileFromEmail(email))`
+— any credentials work, the local `AuthUser` (`uid:"demo"`) takes its displayName
+from the email prefix, and `afterAuth` seeds the **default lanes only** (clean
+first-run feel). A tertiary "Skip — explore with sample data" button calls
+`signInAsDemo()`, which seeds the full sample world (sessions + parking) via
+`seedDemoData({withSamples:true})`. Nothing persists or syncs; data resets on reload.
+
+Caveats: the demo uid is always `"demo"` and the in-memory world is shared for the
+JS session — signing out and back in with a different email reuses the same data
+(`seedDemoData` is idempotent).
 
 ## Configuration & prerequisites (for real accounts)
 
@@ -99,8 +104,8 @@ real sign-in works (otherwise demo mode):
   try/catch falling back to `getAuth`/`getFirestore` so Fast Refresh doesn't crash.
 - **`initializing` must flip exactly once.** `setUser` sets `initializing=false`;
   don't add a second code path that leaves it stuck true (splash would hang).
-- **Sign-out is in an odd place** (bottom of Plan). If you add a Settings screen,
-  move it there and update [weekly-plan.md](weekly-plan.md).
+- **Sign-out lives on the Profile tab** behind a confirmation Alert (moved from the
+  Plan screen when Profile was added).
 - **Error surfacing** — sign-in/up errors are shown via `Alert` with the Firebase
   error message (e.g. wrong-password, email-already-in-use). Fine for the interim app.
 

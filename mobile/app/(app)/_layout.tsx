@@ -55,6 +55,13 @@ export default function AppLayout() {
           tabBarIcon: ({ color }) => <TabGlyph glyph="⚑" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => <TabGlyph glyph="◐" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -64,9 +64,11 @@ session complete/abandon → cancelNudges(activeNudgeIds)
 - **Local notifications need a foregrounded JS context to be *scheduled*** (they're
   scheduled at session start, which is fine). They then fire even if the app is
   closed because the OS owns the schedule.
-- **Settings come from `DEFAULT_SETTINGS`** (not persisted) — so quiet hours are
-  always 22:00–07:00 and style is always `standard` until settings persistence is
-  built.
+- **Settings are user-configurable now** — quiet hours, `checkinStyle`, and
+  `maxCheckinsPerDay` are edited on the Profile tab and persisted to
+  `users/{uid}.settings` (see [data-firestore.md](data-firestore.md));
+  `scheduleSessionNudges` receives them via `useApp.settings`. New devices fall back
+  to `DEFAULT_SETTINGS` until the doc loads.
 - **`scheduleSessionNudges` is wrapped in `.catch(() => [])`** at the call site, so a
   scheduling failure (e.g. denied permission) won't break session start; you just get
   no nudges.

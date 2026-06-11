@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import {
   DEFAULT_SETTINGS,
+  actualHoursByDomain,
   getWeekId,
+  mergeSettings,
   newSession,
   pause,
   resume,
@@ -15,17 +17,20 @@ import {
   type Week,
 } from "@/src/domain";
 import {
+  createDomain,
   createSession,
   newSessionId,
   observeDomains,
   observeOpenParking,
   observeSessionsForWeek,
   observeActiveSession,
+  observeUserSettings,
   observeWeek,
   updateParkingItem,
   addParkingItem,
   updateSession,
   updateDomain,
+  updateUserSettings,
   upsertWeek,
 } from "@/src/firebase/repositories";
 import {
@@ -43,7 +48,10 @@ interface AppState {
   uid: string | null;
   settings: UserSettings;
   weekId: string;
+  /** Active (non-archived) lanes — what most screens render. */
   domains: Domain[];
+  /** Every lane incl. archived — for resolving history (Review, old sessions). */
+  domainsAll: Domain[];
   week: Week | null;
   weekSessions: Session[];
   activeSession: Session | null;
@@ -57,11 +65,28 @@ interface AppState {
   _setWeekSessions: (s: Session[]) => void;
   _setActiveSession: (s: Session | null) => void;
   _setParking: (p: ParkingLotItem[]) => void;
+  _setSettings: (s: UserSettings) => void;
 
   // actions
   domainById: (id: string) => Domain | undefined;
   ensureWeek: () => Promise<void>;
   setDomainTarget: (id: string, hours: number) => Promise<void>;
+  addDomain: (data: {
+    name: string;
+    icon: string;
+    color: string;
+    weeklyTargetHours: number;
+  }) => Promise<string | null>;
+  editDomain: (
+    id: string,
+    patch: Partial<Pick<Domain, "name" | "icon" | "color" | "weeklyTargetHours">>,
+  ) => Promise<void>;
+  archiveDomain: (
+    id: string,
+  ) => Promise<{ ok: boolean; reason?: "active-session" }>;
+  /** Hours logged against a lane this week (for archive warnings etc.). */
+  loggedHoursFor: (id: string) => number;
+  updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
   startSession: (args: StartArgs) => Promise<void>;
   pauseActive: () => Promise<void>;
   resumeActive: () => Promise<void>;
@@ -77,6 +102,7 @@ export const useApp = create<AppState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   weekId: getWeekId(new Date(), DEFAULT_SETTINGS.weekStartsOn),
   domains: [],
+  domainsAll: [],
   week: null,
   weekSessions: [],
   activeSession: null,
@@ -84,13 +110,16 @@ export const useApp = create<AppState>((set, get) => ({
   activeNudgeIds: [],
 
   _hydrate: (uid, weekId) => set({ uid, weekId }),
-  _setDomains: (domains) => set({ domains }),
+  _setDomains: (domainsAll) =>
+    set({ domainsAll, domains: domainsAll.filter((d) => !d.archived) }),
   _setWeek: (week) => set({ week }),
   _setWeekSessions: (weekSessions) => set({ weekSessions }),
   _setActiveSession: (activeSession) => set({ activeSession }),
   _setParking: (parking) => set({ parking }),
+  _setSettings: (settings) => set({ settings }),
 
-  domainById: (id) => get().domains.find((d) => d.id === id),
+  // Searches ALL lanes so archived ones still resolve in history views.
+  domainById: (id) => get().domainsAll.find((d) => d.id === id),
 
   ensureWeek: async () => {
     const { uid, weekId, week, domains, settings } = get();
@@ -110,6 +139,50 @@ export const useApp = create<AppState>((set, get) => ({
     const { uid } = get();
     if (!uid) return;
     await updateDomain(uid, id, { weeklyTargetHours: Math.max(0, hours) });
+  },
+
+  addDomain: async (data) => {
+    const { uid, domainsAll } = get();
+    if (!uid) return null;
+    // Max over ALL lanes (incl. archived) so a new lane can't collide with an
+    // archived one's order.
+    const order = domainsAll.length
+      ? Math.max(...domainsAll.map((d) => d.order)) + 1
+      : 0;
+    return createDomain(uid, { ...data, order, archived: false });
+  },
+
+  editDomain: async (id, patch) => {
+    const { uid } = get();
+    if (!uid) return;
+    await updateDomain(uid, id, patch);
+  },
+
+  archiveDomain: async (id) => {
+    const { uid, activeSession } = get();
+    if (!uid) return { ok: false };
+    // Guard the single-active-session read path — the session screen resolves
+    // its lane via domainById; archiving mid-block would orphan the active UI.
+    if (activeSession?.domainId === id) {
+      return { ok: false, reason: "active-session" as const };
+    }
+    await updateDomain(uid, id, { archived: true });
+    return { ok: true };
+  },
+
+  loggedHoursFor: (id) => {
+    const { weekSessions } = get();
+    return actualHoursByDomain(weekSessions, Date.now())[id] ?? 0;
+  },
+
+  updateSettings: async (patch) => {
+    const { uid, settings } = get();
+    if (!uid) return;
+    // Optimistic; the snapshot echo carries the same values so the week
+    // listeners' weekStartsOn re-key (see useAppSync) settles in one pass.
+    const next = mergeSettings({ ...settings, ...patch });
+    set({ settings: next });
+    await updateUserSettings(uid, next);
   },
 
   startSession: async ({ domainId, intendedOutcome, plannedDurationMin }) => {
@@ -195,28 +268,48 @@ export const useApp = create<AppState>((set, get) => ({
 }));
 
 /**
- * Wire all per-user Firestore listeners into the store. Mount once inside the
- * authenticated area; re-subscribes whenever the uid changes.
+ * Wire all per-user listeners into the store. Mount once inside the
+ * authenticated area.
+ *
+ * Two effects on purpose:
+ * - Effect 1 (uid-scoped): settings, domains, active session, parking.
+ * - Effect 2 (week-scoped): re-keys on `settings.weekStartsOn` so changing the
+ *   week start re-subscribes the week + sessions listeners for the new weekId.
+ *
+ * The weekStartsOn dependency is a PRIMITIVE selector — load-bearing: snapshot
+ * emits create new `settings` objects every time, and depending on the object
+ * would re-run the effect (and with the settings observer inside it, loop).
+ * The primitive only changes on a real user action, so this settles in one
+ * re-subscription.
  */
 export function useAppSync(uid: string | null): void {
-  const store = useApp;
+  const weekStartsOn = useApp((s) => s.settings.weekStartsOn);
+
   useEffect(() => {
     if (!uid) return;
-    const weekId = getWeekId(new Date(), useApp.getState().settings.weekStartsOn);
-    store.getState()._hydrate(uid, weekId);
-
     const unsubs = [
-      observeDomains(uid, (d) => store.getState()._setDomains(d)),
-      observeWeek(uid, weekId, (w) => {
-        store.getState()._setWeek(w);
-        if (!w) void store.getState().ensureWeek();
-      }),
-      observeSessionsForWeek(uid, weekId, (s) =>
-        store.getState()._setWeekSessions(s),
-      ),
-      observeActiveSession(uid, (s) => store.getState()._setActiveSession(s)),
-      observeOpenParking(uid, (p) => store.getState()._setParking(p)),
+      observeUserSettings(uid, (s) => useApp.getState()._setSettings(s)),
+      observeDomains(uid, (d) => useApp.getState()._setDomains(d)),
+      observeActiveSession(uid, (s) => useApp.getState()._setActiveSession(s)),
+      observeOpenParking(uid, (p) => useApp.getState()._setParking(p)),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [uid, store]);
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid) return;
+    const weekId = getWeekId(new Date(), weekStartsOn);
+    useApp.getState()._hydrate(uid, weekId);
+
+    const unsubs = [
+      observeWeek(uid, weekId, (w) => {
+        useApp.getState()._setWeek(w);
+        if (!w) void useApp.getState().ensureWeek();
+      }),
+      observeSessionsForWeek(uid, weekId, (s) =>
+        useApp.getState()._setWeekSessions(s),
+      ),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [uid, weekStartsOn]);
 }

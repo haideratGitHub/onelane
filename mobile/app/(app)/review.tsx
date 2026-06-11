@@ -13,6 +13,7 @@ import { formatHours } from "@/src/utils/format";
 
 export default function Review() {
   const domains = useApp((s) => s.domains);
+  const domainsAll = useApp((s) => s.domainsAll);
   const weekId = useApp((s) => s.weekId);
   const week = useApp((s) => s.week);
   const weekSessions = useApp((s) => s.weekSessions);
@@ -23,7 +24,9 @@ export default function Review() {
 
   const summaries = summarizeWeek(targets, weekSessions, Date.now(), order);
   const head = weekHeadline(summaries);
-  const meta = (id: string) => domains.find((d) => d.id === id);
+  // Resolve against ALL lanes so an archived lane with hours logged this week
+  // still shows its name/icon/color (summarizeWeek unions actuals into the rows).
+  const meta = (id: string) => domainsAll.find((d) => d.id === id);
 
   return (
     <Screen>

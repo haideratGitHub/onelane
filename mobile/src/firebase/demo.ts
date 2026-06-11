@@ -2,9 +2,11 @@ import {
   DEFAULT_DOMAINS,
   DEFAULT_SETTINGS,
   getWeekId,
+  mergeSettings,
   type Domain,
   type ParkingLotItem,
   type Session,
+  type UserSettings,
   type Week,
 } from "@/src/domain";
 import type { AuthUser } from "./auth";
@@ -30,10 +32,14 @@ export const DEMO_USER: AuthUser = {
 let currentUser: AuthUser | null = null;
 const authListeners = new Set<(user: AuthUser | null) => void>();
 
-export function signInDemo(): AuthUser {
-  currentUser = DEMO_USER;
+/**
+ * Sign in the local demo user, optionally overlaying a profile (e.g. the email
+ * the user typed into the real onboarding form) so the app greets them by name.
+ */
+export function signInDemo(profile?: Partial<AuthUser>): AuthUser {
+  currentUser = { ...DEMO_USER, ...(profile ?? {}) };
   authListeners.forEach((cb) => cb(currentUser));
-  return DEMO_USER;
+  return currentUser;
 }
 
 export function signOutDemo(): void {
@@ -72,10 +78,9 @@ export function newDemoId(prefix: string): string {
 
 /* current snapshots, shaped exactly like the Firestore queries */
 
+/** ALL domains, archived included — the store derives the active subset. */
 function domainsSnapshot(): Domain[] {
-  return [...domains.values()]
-    .filter((d) => !d.archived)
-    .sort((a, b) => a.order - b.order);
+  return [...domains.values()].sort((a, b) => a.order - b.order);
 }
 
 function sessionsSnapshot(weekId: string): Session[] {
@@ -115,14 +120,21 @@ function notifyParking() {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 
-/** Seed the demo world once (idempotent) — called via bootstrapDomains on sign-in. */
-export function seedDemoData(): void {
+/**
+ * Seed the demo world once (idempotent) — called via bootstrapDomains on
+ * sign-in. The plain onboarding path seeds default lanes only (real first-run
+ * feel); `withSamples` (the "explore with sample data" path) also seeds a few
+ * finished sessions and parking items so every screen has content.
+ */
+export function seedDemoData(opts?: { withSamples?: boolean }): void {
   if (domains.size > 0) return;
 
   DEFAULT_DOMAINS.forEach((d) => {
     const id = newDemoId("d");
     domains.set(id, { id, ...d });
   });
+
+  if (!opts?.withSamples) return;
 
   const now = Date.now();
   const byOrder = domainsSnapshot();
@@ -185,6 +197,26 @@ export function seedDemoData(): void {
       status: "open",
     });
   });
+}
+
+/* ------------------------------ settings ------------------------------- */
+
+let settings: UserSettings = DEFAULT_SETTINGS;
+const settingsListeners = new Set<(s: UserSettings) => void>();
+
+export function observeSettingsDemo(
+  cb: (s: UserSettings) => void,
+): () => void {
+  settingsListeners.add(cb);
+  cb(settings);
+  return () => settingsListeners.delete(cb);
+}
+
+export async function updateSettingsDemo(
+  patch: Partial<UserSettings>,
+): Promise<void> {
+  settings = mergeSettings({ ...settings, ...patch });
+  settingsListeners.forEach((cb) => cb(settings));
 }
 
 /* --------------------- repository-shaped operations --------------------- */

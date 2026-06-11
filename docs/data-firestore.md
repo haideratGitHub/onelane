@@ -25,6 +25,7 @@ numbers** (see [architecture.md](architecture.md) §5.1).
 ```
 users/{uid}
   profile: { displayName, email, photoURL }
+  settings: { weekStartsOn, timezone, quietHours:{start,end}, maxCheckinsPerDay, checkinStyle }   # partial OK — merged over DEFAULT_SETTINGS on read
 
 users/{uid}/domains/{domainId}        # a lane
   { name, color, icon, weeklyTargetHours, order, archived }
@@ -60,7 +61,7 @@ These are the only place Firestore is touched. Signatures from
 | Function | Kind | Effect |
 |---|---|---|
 | `bootstrapDomains(uid)` | write | Seeds `DEFAULT_DOMAINS` once (skips if any domain exists). Batch write. |
-| `observeDomains(uid, cb)` | listen | `orderBy("order")`, filters out `archived`, emits `Domain[]`. Returns unsub. |
+| `observeDomains(uid, cb)` | listen | `orderBy("order")`, emits **all** domains incl. archived (the store derives the active subset — archived lanes must stay resolvable for history). Returns unsub. |
 | `createDomain(uid, data)` | write | New domain doc; returns its id. |
 | `updateDomain(uid, id, patch)` | write | Partial update (used for `weeklyTargetHours`). |
 
@@ -82,16 +83,25 @@ These are the only place Firestore is touched. Signatures from
 
 **user**
 | `ensureUserDoc(uid, profile)` | write | `set({profile}, {merge:true})`. Called on sign-in. |
+| `observeUserSettings(uid, cb)` | listen | `onSnapshot(userDoc)` → `mergeSettings(data().settings)` — always emits a complete `UserSettings` (missing doc/field/partial all safe). |
+| `updateUserSettings(uid, patch)` | write | `set({settings: patch}, {merge:true})`. Callers send `quietHours` whole, never partial. |
 
 ## Live-sync engine
 
-`useAppSync(uid)` (in `useApp.ts`, mounted by `app/(app)/_layout.tsx`):
-- Computes `weekId = getWeekId(now, settings.weekStartsOn)` and hydrates the store.
-- Attaches `observeDomains`, `observeWeek`, `observeSessionsForWeek`,
-  `observeActiveSession`, `observeOpenParking` and pipes each into the store.
+`useAppSync(uid)` (in `useApp.ts`, mounted by `app/(app)/_layout.tsx`) is **two
+effects**:
+- **Effect 1 — uid-scoped** (`[uid]`): attaches `observeUserSettings`,
+  `observeDomains`, `observeActiveSession`, `observeOpenParking`.
+- **Effect 2 — week-scoped** (`[uid, settings.weekStartsOn]`): computes
+  `weekId = getWeekId(now, weekStartsOn)`, hydrates the store, attaches
+  `observeWeek` + `observeSessionsForWeek`. Changing the week start in Profile
+  re-keys just these two listeners for the new weekId.
 - On `observeWeek` returning `null`, calls `ensureWeek()` to snapshot the current
   week doc from the live domains' targets.
-- Returns a cleanup that unsubscribes all listeners; re-runs when `uid` changes.
+- ⚠️ The `weekStartsOn` dependency is a **primitive** Zustand selector — load-bearing.
+  Snapshot emits create new `settings` objects every time; depending on the object
+  would re-run Effect 2 on every settings write (and looping the settings observer
+  if it ever moved there). Keep it a primitive.
 
 Writes are **optimistic**: actions update the Zustand store immediately *and* call a
 repository write; the `onSnapshot` listener then reconciles with the server copy.
@@ -149,7 +159,8 @@ index**; create it from the console link in the thrown error, and note it here.
 - No data migration tooling; schema changes rely on `merge` + client tolerance.
 - No pagination/retention on sessions (fine at personal scale).
 - `promoted` parking status has no writer yet.
-- Settings are never persisted to `users/{uid}` (no `settings` field written).
+- ~~Settings are never persisted~~ — settings now live in `users/{uid}.settings`
+  (Profile tab edits them; `mergeSettings` defends partial/missing data).
 
 ---
 

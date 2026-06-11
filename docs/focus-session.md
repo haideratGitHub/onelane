@@ -73,6 +73,9 @@ and `<Redirect href="/" />`s if there's no active session.
   counter (see [architecture.md](architecture.md) §5.2).
 - **Pause / resume:** closes/opens a segment via the pure helpers; paused time does
   not count. Each transition persists via `updateSession`.
+- **Planned duration visible:** the status line under the timer shows
+  `Focused · planned 50 min` (when `plannedDurationMin` is set), so the soft target
+  is visible before the overrun banner ever appears.
 - **Yak-shave guard:** once `hasOverrun(session, now)` (elapsed > planned, or 50-min
   fallback), a calm banner appears suggesting you park the side-quest or close the
   block. It does not block anything.

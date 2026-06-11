@@ -15,9 +15,11 @@ import {
 } from "firebase/firestore";
 import {
   DEFAULT_DOMAINS,
+  mergeSettings,
   type Domain,
   type ParkingLotItem,
   type Session,
+  type UserSettings,
   type Week,
 } from "@/src/domain";
 import {
@@ -69,13 +71,18 @@ export async function bootstrapDomains(uid: string): Promise<void> {
   await batch.commit();
 }
 
+/**
+ * Emits ALL domains, archived included — the store derives the active subset.
+ * (Archived lanes must stay resolvable so Review/session history keeps their
+ * name/icon/color.)
+ */
 export function observeDomains(
   uid: string,
   cb: (domains: Domain[]) => void,
 ): Unsub {
   if (!isFirebaseConfigured) return demo.observeDomainsDemo(cb);
   return onSnapshot(query(domainsCol(uid), orderBy("order")), (snap) => {
-    cb(snap.docs.map((d) => fromDoc<Domain>(d)).filter((d) => !d.archived));
+    cb(snap.docs.map((d) => fromDoc<Domain>(d)));
   });
 }
 
@@ -207,4 +214,29 @@ export async function ensureUserDoc(
 ): Promise<void> {
   if (!isFirebaseConfigured) return; // demo user has no doc
   await setDoc(userDoc(uid), { profile }, { merge: true });
+}
+
+/**
+ * Settings live as a `settings` field on users/{uid}. mergeSettings defends
+ * against a missing doc / missing field / partial object, so observers always
+ * receive a complete UserSettings.
+ */
+export function observeUserSettings(
+  uid: string,
+  cb: (settings: UserSettings) => void,
+): Unsub {
+  if (!isFirebaseConfigured) return demo.observeSettingsDemo(cb);
+  return onSnapshot(userDoc(uid), (snap) => {
+    cb(mergeSettings((snap.data()?.settings ?? null) as Partial<UserSettings> | null));
+  });
+}
+
+export function updateUserSettings(
+  uid: string,
+  patch: Partial<UserSettings>,
+): Promise<void> {
+  if (!isFirebaseConfigured) return demo.updateSettingsDemo(patch);
+  // merge:true deep-merges nested maps and creates the doc if needed. Callers
+  // must send quietHours as a whole object so the stored map is never partial.
+  return setDoc(userDoc(uid), { settings: patch }, { merge: true });
 }
