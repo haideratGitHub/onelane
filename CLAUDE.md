@@ -95,12 +95,13 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
 - **Runs in Expo Go (interim).** No native modules currently — `npm run start` then
   scan the QR. Firebase uses the **JS SDK** (modular API: `collection(db,…)`,
   `onSnapshot(query(...))`, `snap.exists()`), configured from `EXPO_PUBLIC_FIREBASE_*`
-  env. **No env → demo mode, never a crash**: in-memory backend + sample data
-  (`src/firebase/demo.ts`); every repository function short-circuits to its demo
-  counterpart — keep that pattern when adding repository functions. Google sign-in
-  stays Expo Go-compatible via the server-side broker in `web/` (custom-token flow);
-  *native* Google Sign-In would require a custom dev build (`npx expo run:ios|android`).
-  See [docs/auth.md](docs/auth.md).
+  env. **Firebase is required** — `src/firebase/firebase.ts` asserts the env at
+  startup with a clear error (copy `.env.example` → `.env`). The repository
+  functions (`src/firebase/repositories.ts`) talk straight to Firestore; there is
+  **no demo/offline fallback** (removed — don't reintroduce per-function branching).
+  Google sign-in stays Expo Go-compatible via the server-side broker in `web/`
+  (custom-token flow); *native* Google Sign-In would require a custom dev build
+  (`npx expo run:ios|android`). See [docs/auth.md](docs/auth.md).
 
 ## Commands
 

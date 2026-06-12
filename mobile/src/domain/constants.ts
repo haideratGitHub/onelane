@@ -24,19 +24,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
 };
 
 /**
- * Sample lanes for DEMO MODE ONLY ("explore with sample data"). Real users —
- * and the plain demo onboarding path — start with zero lanes and build their
- * own; the lane editor offers LANE_TEMPLATES below as a starting point.
- */
-export const DEFAULT_DOMAINS: Omit<Domain, "id">[] = [
-  { name: "Office", color: "#3B82F6", icon: "💼", weeklyTargetHours: 40, order: 0, archived: false },
-  { name: "Trading", color: "#10B981", icon: "📈", weeklyTargetHours: 12, order: 1, archived: false },
-  { name: "SaaS", color: "#8B5CF6", icon: "🚀", weeklyTargetHours: 15, order: 2, archived: false },
-  { name: "Learning", color: "#F59E0B", icon: "📚", weeklyTargetHours: 8, order: 3, archived: false },
-  { name: "Gym", color: "#EF4444", icon: "🏋️", weeklyTargetHours: 6, order: 4, archived: false },
-];
-
-/**
  * One-tap starting points offered in the lane editor when creating a lane.
  * They only PREFILL the form (name/icon/color/target) — nothing is created
  * until the user saves, and every field stays editable, so the template row

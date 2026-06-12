@@ -111,6 +111,12 @@ export async function dismissSessionNotification(
   await Notifications.dismissNotificationAsync(sessionNoticeId(sessionId));
 }
 
+/** Cancel everything pending and clear delivered — used on account deletion. */
+export async function clearAllNotifications(): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await Notifications.dismissAllNotificationsAsync();
+}
+
 /* ----------------------- action responses ----------------------- */
 
 // A response can be delivered twice (live listener + the cold-start fetch on

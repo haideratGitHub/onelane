@@ -194,8 +194,9 @@ app/
 - **The lane palette is duplicated in both apps and must be kept in sync by hand**
   (office `#3B82F6`, trading `#10B981`, saas `#8B5CF6`, learning `#F59E0B`, gym
   `#EF4444`; brand line yellow `#FACC15`, ink `#0B0F14`). If you change a brand
-  color, change it in `mobile/tailwind.config.js`, `mobile/src/theme.ts`,
-  `mobile/src/domain/constants.ts` (DEFAULT_DOMAINS), and `web/tailwind.config.ts`.
+  color, change it in `mobile/tailwind.config.js`, `mobile/src/theme.ts`
+  (`LANE_PALETTE` + `colors`), `mobile/src/domain/constants.ts` (`LANE_TEMPLATES`),
+  and `web/tailwind.config.ts`.
 
 ### 8.1 Keyboard-aware screens (`ScreenScroll`)
 Any screen with a text input must use **`ScreenScroll`** (`components/ui.tsx`), not

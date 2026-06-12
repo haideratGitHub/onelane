@@ -15,17 +15,16 @@ import { db } from "./firebase";
  *   users/{uid}/sessions/{sessionId}
  *   users/{uid}/parkingLot/{itemId}
  *
- * `db!`: these builders are only reached from repositories.ts branches that run
- * when Firebase IS configured (demo mode short-circuits before them), so db is
- * never null here.
+ * `db` is non-null: firebase.ts asserts Firebase is configured at startup, so
+ * the SDK is always initialized by the time these builders run.
  */
-export const userDoc = (uid: string): DocumentReference => doc(db!, "users", uid);
+export const userDoc = (uid: string): DocumentReference => doc(db, "users", uid);
 
 export const domainsCol = (uid: string): CollectionReference =>
-  collection(db!, "users", uid, "domains");
+  collection(db, "users", uid, "domains");
 export const weeksCol = (uid: string): CollectionReference =>
-  collection(db!, "users", uid, "weeks");
+  collection(db, "users", uid, "weeks");
 export const sessionsCol = (uid: string): CollectionReference =>
-  collection(db!, "users", uid, "sessions");
+  collection(db, "users", uid, "sessions");
 export const parkingLotCol = (uid: string): CollectionReference =>
-  collection(db!, "users", uid, "parkingLot");
+  collection(db, "users", uid, "parkingLot");

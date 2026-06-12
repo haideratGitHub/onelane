@@ -2,9 +2,9 @@ import type { FirebaseOptions } from "firebase/app";
 
 /**
  * Firebase Web config from EXPO_PUBLIC_FIREBASE_* env vars (see .env.example).
- * When the vars are absent the app does NOT crash — it runs in **demo mode**
- * (in-memory backend, seeded sample data; see demo.ts) so you can walk through
- * the whole app before setting up Firebase.
+ * Firebase is **required** — the env must be present (firebase.ts asserts it at
+ * startup with a clear error). Set it up before running: copy `.env.example` to
+ * `.env` and fill these in (see docs/auth.md).
  */
 export const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,

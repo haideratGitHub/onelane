@@ -14,7 +14,7 @@ weeks.
 | `mobile/app/lane/[id]/history.tsx` | **Lane history modal**: summary (blocks, total time in lane, weekly target) + every finished block newest-first (outcome, date/time, duration, "left early" for abandoned, closure note). One-shot fetch via `fetchLaneHistory`. Opened by tapping a lane on Today or from the editor. |
 | `mobile/src/store/useApp.ts` | `setDomainTarget`, `addDomain`, `editDomain`, `archiveDomain`, `loggedHoursFor`, `fetchLaneHistory` (finished blocks, newest first), `ensureWeek`; state `domains` (active), `domainsAll` (incl. archived). |
 | `mobile/src/firebase/repositories.ts` | `observeDomains` (**emits all, incl. archived**), `updateDomain`, `createDomain`, `observeWeek`, `upsertWeek`. |
-| `mobile/src/domain/constants.ts` | `LANE_TEMPLATES` (editor prefills), `DEFAULT_DOMAINS` (**demo-mode sample lanes only**), `MAX_REASONABLE_WEEK_HOURS` (right-size threshold). |
+| `mobile/src/domain/constants.ts` | `LANE_TEMPLATES` (editor prefills), `MAX_REASONABLE_WEEK_HOURS` (right-size threshold). |
 | `mobile/src/theme.ts` | `LANE_PALETTE` (colors), `LANE_ICONS` (emoji choices), `laneColor(order)`. |
 | `mobile/src/components/LaneRow.tsx` | Lane progress bar (shared with Review/Today). |
 

@@ -9,8 +9,7 @@ access, and the live-sync engine that feeds the UI.
 | File | Role |
 |---|---|
 | `mobile/src/firebase/config.ts` | Env → `firebaseConfig` + `isFirebaseConfigured`. |
-| `mobile/src/firebase/firebase.ts` | Initializes the **Firebase JS SDK** app from `EXPO_PUBLIC_FIREBASE_*` env (**only when configured** — exports are `null` otherwise); `db = initializeFirestore(app, {experimentalForceLongPolling:true})` and `fbAuth` (AsyncStorage persistence). |
-| `mobile/src/firebase/demo.ts` | **Demo mode** in-memory backend (same observe/write contracts, seeded sample data) used when Firebase isn't configured. Every repository function short-circuits to it. |
+| `mobile/src/firebase/firebase.ts` | Initializes the **Firebase JS SDK** app from `EXPO_PUBLIC_FIREBASE_*` env; **asserts the env at startup** (throws if missing — Firebase is required). Exports non-null `db = initializeFirestore(app, {experimentalForceLongPolling:true})` and `fbAuth` (AsyncStorage persistence). |
 | `mobile/src/firebase/paths.ts` | Collection/doc ref builders via modular `collection()`/`doc()` (the schema, in code). |
 | `mobile/src/firebase/repositories.ts` | All reads/writes/listeners + `toDoc`/`fromDoc` (de)serialization. |
 | `mobile/src/store/useApp.ts` | `useAppSync(uid)` attaches the listeners; actions call the repositories. |
@@ -85,6 +84,7 @@ These are the only place Firestore is touched. Signatures from
 | `ensureUserDoc(uid, profile)` | write | `set({profile}, {merge:true})`. Called on sign-in. |
 | `observeUserSettings(uid, cb)` | listen | `onSnapshot(userDoc)` → `mergeSettings(data().settings)` — always emits a complete `UserSettings` (missing doc/field/partial all safe). |
 | `updateUserSettings(uid, patch)` | write | `set({settings: patch}, {merge:true})`. Callers send `quietHours` whole, never partial. |
+| `deleteAllUserData(uid)` | delete | **Account deletion**: every doc in all four subcollections (client-side, batched ≤450 ops/commit), then `users/{uid}` itself. Idempotent/resumable. Must run **before** the Auth user is deleted (the writes need a signed-in user). Called only by `deleteAccount` ([auth.md](auth.md)). |
 
 ## Live-sync engine
 
@@ -124,11 +124,12 @@ index**; create it from the console link in the thrown error, and note it here.
 
 ## Caveats / gotchas
 
-- **Demo-mode delegation**: every repository function starts with
-  `if (!isFirebaseConfigured) return demo.…`. If you add a repository function, add
-  its demo counterpart in `demo.ts` too — otherwise demo mode crashes on that path.
-  `paths.ts` uses `db!` on the assumption it's only reached when configured; keep the
-  demo short-circuit **before** any `paths.ts` call.
+- **Firebase is required — no demo/offline fallback.** The old in-memory demo
+  backend was removed; repository functions talk straight to Firestore and `db`/
+  `fbAuth` are non-null (`firebase.ts` asserts the env at startup). When adding a
+  repository function, just write the Firestore path — there's no second backend to
+  mirror. (Firestore's own in-memory cache still serves brief offline reads, but
+  there is no seeded local mode.)
 
 - **Client timestamps, not `serverTimestamp()`.** Intentional. Don't "fix" this by
   switching to server timestamps — it would break the offline-first, epoch-ms model

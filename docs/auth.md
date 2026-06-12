@@ -18,18 +18,17 @@ small server-side **auth broker** hosted in `web/` (see below) so it works in Ex
 
 | File | Role |
 |---|---|
-| `mobile/src/firebase/config.ts` | Reads `EXPO_PUBLIC_FIREBASE_*` env → `firebaseConfig` + the `isFirebaseConfigured` flag. |
-| `mobile/src/firebase/firebase.ts` | **Conditionally** initializes the Firebase JS SDK (only when configured — exports are `null` otherwise, no crash); `fbAuth` (AsyncStorage persistence) + `db` (long-polling Firestore). |
-| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInWithGoogle` (+ `isGoogleSignInAvailable`), `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`, `friendlyAuthError` (maps Firebase `auth/*` codes → human sentences); defines the app-facing **`AuthUser`** type. |
+| `mobile/src/firebase/config.ts` | Reads `EXPO_PUBLIC_FIREBASE_*` env → `firebaseConfig` + the `isFirebaseConfigured` flag (consumed by `firebase.ts` for the startup assertion). |
+| `mobile/src/firebase/firebase.ts` | Initializes the Firebase JS SDK; **asserts the env is present at startup** (throws a clear "copy .env.example" error if not). Exports non-null `fbAuth` (AsyncStorage persistence) + `db` (long-polling Firestore). |
+| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInWithGoogle` (+ `isGoogleSignInAvailable`), `signOutEverywhere`, `deleteAccount`, `onAuthChanged`, `friendlyAuthError` (maps Firebase `auth/*` codes → human sentences); defines the app-facing **`AuthUser`** type. |
 | `web/lib/auth-broker.ts` | Broker helpers: HMAC-signed OAuth `state` (carries the app's return deep link; 10-min expiry; allowed schemes `exp://`/`exps://`/`onelane://`), lazy `firebase-admin` init, `upsertFirebaseUser` (find-or-create by email). |
 | `web/app/api/auth/google/start/route.ts` | Validates the `return` deep link and redirects the system browser to Google's consent screen (server is the OAuth `redirect_uri`). |
 | `web/app/api/auth/google/callback/route.ts` | Exchanges the code, checks `aud`/`iss`/`email_verified` on the id_token, upserts the Firebase user, mints a **custom token**, deep-links it (or an `?error=`) back into the app. |
-| `mobile/src/firebase/demo.ts` | **Demo mode**: in-memory auth + data backend with seeded sample data, used when Firebase isn't configured. |
 | `mobile/src/store/useAuth.ts` | Zustand store holding `{ user, initializing }` + `useAuthListener()`. `user` is **`AuthUser`** (decoupled from Firebase types). |
 | `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, gates the splash on `initializing`. |
 | `mobile/app/sign-in.tsx` | The sign-in screen: a **centered, minimal brand block** (logo mark + "onelane" + the one-line tagline — no marketing paragraph; the landing page carries that) above the email + password form with a Sign in / Create account toggle. Keyboard-aware via the shared `ScreenScroll` primitive (`components/ui.tsx`), return-key chaining (email → password → submit). Password uses `PasswordField` (eye toggle). |
 | `mobile/app/(app)/_layout.tsx` | **Auth gate**: redirects to `/sign-in` when there's no user. |
-| `mobile/app/(app)/profile.tsx` | Profile tab: identity card, app settings, and the "Sign out" button (with confirmation). |
+| `mobile/app/(app)/profile.tsx` | Profile tab: identity card, app settings, "Sign out" (with confirmation), and the **Danger zone** ("Delete account" — double confirmation, permanent). |
 | `mobile/app.config.ts` | Expo config — no native auth plugins anymore (Firebase is configured at runtime from env). |
 | `mobile/.env.example` | The `EXPO_PUBLIC_FIREBASE_*` env vars the app reads. |
 
@@ -69,34 +68,41 @@ small server-side **auth broker** hosted in `web/` (see below) so it works in Ex
    Tabs; `useAppSync(uid)` (in the same layout) starts the Firestore listeners.
 6. **Sign-out** (Profile tab → confirmation Alert → `signOutEverywhere`): `signOut(fbAuth)` → listener sets
    `user=null` → gate redirects to `/sign-in`.
+7. **Account deletion** (Profile tab → Danger zone → **two** destructive-style
+   Alerts spelling out "permanent, cannot be undone" → `deleteAccount()`):
+   - **Recency pre-check first**: Firebase deletes a user only with a recent
+     sign-in (`auth/requires-recent-login`), so `deleteAccount` checks
+     `currentUser.metadata.lastSignInTime` against a ~5-minute window **before
+     touching any data**. Stale session → throws a human message ("sign out,
+     sign back in, then delete") and nothing is deleted. This is deliberate:
+     custom-token (Google-broker) users can't `reauthenticateWithCredential`,
+     so a fresh sign-in is the one reauth path that works for every provider.
+   - Then `deleteAllUserData(uid)` ([data-firestore.md](data-firestore.md)) —
+     client-side batched deletion of all four subcollections + `users/{uid}` —
+     then `deleteUser(currentUser)`, which also signs the user out → gate
+     redirects to `/sign-in`. The Profile screen finishes with
+     `clearAllNotifications()` (pending nudges + delivered cards).
 
-## Demo mode (no Firebase config)
+## Firebase is required (no demo/offline fallback)
 
-When the `EXPO_PUBLIC_FIREBASE_*` env is **absent**, the app must not crash —
-`firebase.ts` skips initialization entirely (`fbAuth`/`db` are `null`) and everything
-delegates to `demo.ts` (in-memory backend, same observe/write contracts). The
-sign-in screen still shows the **real onboarding form** (with a small demo banner):
-`signInWithEmail`/`signUpWithEmail` fall back to `demoSignIn(profileFromEmail(email))`
-— any credentials work, the local `AuthUser` (`uid:"demo"`) takes its displayName
-from the email prefix, and — like a real first run — **no lanes are seeded**. "Continue
-with Google" likewise falls back to a fake local Google
-user (no browser round-trip). A tertiary "Skip — explore with sample data" button calls
-`signInAsDemo()`, which seeds the full sample world (lanes + sessions + parking) via
-`seedDemoData({withSamples:true})`. Nothing persists or syncs; data resets on reload.
+The old in-memory **demo mode** (and `signInAsDemo` / "explore with sample data")
+was **removed** — Firebase is now a hard dependency. `firebase.ts` asserts the
+`EXPO_PUBLIC_FIREBASE_*` env at startup and **throws a clear, actionable error**
+("Firebase is not configured. Copy mobile/.env.example to mobile/.env …") if it's
+missing, instead of falling back to a fake local backend or surfacing a cryptic
+`auth/invalid-api-key` mid sign-in. Consequently `fbAuth`/`db` are **non-null** and
+the repository functions talk straight to Firestore (no per-function branching).
+Set up `.env` before running (see below).
 
-Caveats: the demo uid is always `"demo"` and the in-memory world is shared for the
-JS session — signing out and back in with a different email reuses the same data
-(`seedDemoData` is idempotent).
-
-## Configuration & prerequisites (for real accounts)
+## Configuration & prerequisites (required to run)
 
 > **Dev vs prod:** the root [README's "Auth environments"](../README.md#auth-environments-dev-now--prod-later)
 > section is the runbook for which Firebase project / Vercel env / Google client
 > belongs to which environment (dev = Vercel Preview + `dev` branch broker URL;
 > prod = Vercel Production at launch). The steps below apply per environment.
 
-Pure-JS Firebase SDK → **runs in Expo Go** (`npm run start`, scan the QR). Before
-real sign-in works (otherwise demo mode):
+Pure-JS Firebase SDK → **runs in Expo Go** (`npm run start`, scan the QR). The app
+won't start until these are set (`firebase.ts` throws otherwise):
 
 1. **Firebase Web app config** in `mobile/.env` (from `.env.example`) — Firebase
    console → Project settings → Your apps → **Web** app:
@@ -133,9 +139,8 @@ real sign-in works (otherwise demo mode):
 - **Google ↔ email/password share an account**: the broker upserts the Firebase
   user **by email** (`upsertFirebaseUser`), so signing in with Google after
   email/password (same address) lands in the same uid / same Firestore data.
-- **Google button visibility** — `isGoogleSignInAvailable`: shown in demo mode
-  (fake local Google user) or when `EXPO_PUBLIC_AUTH_BROKER_URL` is set; hidden
-  when Firebase is configured but no broker URL is.
+- **Google button visibility** — `isGoogleSignInAvailable`: shown when
+  `EXPO_PUBLIC_AUTH_BROKER_URL` is set, hidden otherwise (`!!AUTH_BROKER_URL`).
 - **First-login bootstrap is the user doc only** — no default lanes; the new user
   builds their own (templates in the lane editor help).
 - **`onAuthChanged`** is the single source of auth truth; everything reacts to it.
@@ -184,13 +189,21 @@ real sign-in works (otherwise demo mode):
   is a hard 400 (the return URL itself can't be trusted then).
 - **`WebBrowser.maybeCompleteAuthSession()`** is called at module top of
   `sign-in.tsx` — keep it if the screen is ever split up.
+- **Account deletion order is load-bearing**: data first, auth user last —
+  Firestore's owner-only rules mean the wipe needs a signed-in user. The
+  recency pre-check makes the half-deleted state (data gone, login alive)
+  rare, but if `deleteUser` still throws `auth/requires-recent-login`, the fix
+  is the same flow again after a fresh sign-in: `ensureUserDoc` recreates the
+  (empty) profile doc on that sign-in and the retry removes it plus the auth
+  user. `deleteAllUserData` is idempotent, so retries are safe.
 
 ## Known gaps
 
 - **Native Google Sign-In** (account picker sheet, real `google.com` provider
   linkage) — optional follow-up in a custom dev build; the broker flow covers
   Google sign-in until then.
-- No password reset, account deletion, re-auth, or profile editing.
+- ~~Account deletion~~ — **done** (Profile → Danger zone; see flow step 7).
+- No password reset, in-place re-auth, or profile editing.
 - No Apple sign-in.
 - User settings (week start, quiet hours) aren't loaded/saved (see [architecture.md](architecture.md) §10).
 

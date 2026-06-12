@@ -1,8 +1,14 @@
+import { useState } from "react";
 import { View, Text, Pressable, ScrollView, Alert } from "react-native";
 import { Screen, Heading, Muted, Card, Label, Button } from "@/src/components/ui";
 import { useAuth } from "@/src/store/useAuth";
 import { useApp } from "@/src/store/useApp";
-import { isFirebaseConfigured, signOutEverywhere } from "@/src/firebase/auth";
+import {
+  deleteAccount,
+  friendlyAuthError,
+  signOutEverywhere,
+} from "@/src/firebase/auth";
+import { clearAllNotifications } from "@/src/notifications/notifications";
 
 /** Minutes-from-midnight → "HH:00" (settings store whole hours via steppers). */
 function formatClock(minutes: number): string {
@@ -21,6 +27,8 @@ export default function Profile() {
     .charAt(0)
     .toUpperCase();
 
+  const [deleting, setDeleting] = useState(false);
+
   function shiftQuietHour(edge: "start" | "end", deltaMin: number) {
     const next = (settings.quietHours[edge] + deltaMin + DAY_MIN) % DAY_MIN;
     // Always write quietHours as a whole object so the stored map stays complete.
@@ -32,6 +40,47 @@ export default function Profile() {
       { text: "Cancel", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: () => void signOutEverywhere() },
     ]);
+  }
+
+  async function runDeleteAccount() {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      // Account + data are gone; clean up anything still scheduled locally.
+      // onAuthChanged fires with null → the (app) gate redirects to /sign-in.
+      await clearAllNotifications().catch(() => {});
+    } catch (e) {
+      Alert.alert("Couldn't delete your account", friendlyAuthError(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function onDeleteAccount() {
+    Alert.alert(
+      "Delete your account?",
+      "This permanently deletes your account and ALL your data — every lane, session, week, and parked thought. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert(
+              "Are you absolutely sure?",
+              "There is no way to get your data back after this.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete everything",
+                  style: "destructive",
+                  onPress: () => void runDeleteAccount(),
+                },
+              ],
+            ),
+        },
+      ],
+    );
   }
 
   return (
@@ -53,13 +102,6 @@ export default function Profile() {
                 {user?.email ? <Muted>{user.email}</Muted> : null}
               </View>
             </View>
-            {!isFirebaseConfigured && (
-              <View className="mt-3 rounded-lg border border-line/30 bg-line/10 px-3 py-2">
-                <Text className="text-xs text-line">
-                  Demo mode — local account, data resets on reload.
-                </Text>
-              </View>
-            )}
           </Card>
         </View>
 
@@ -146,6 +188,24 @@ export default function Profile() {
 
         <View className="mt-10">
           <Button title="Sign out" variant="ghost" onPress={onSignOut} />
+        </View>
+
+        <View className="mt-8">
+          <Label>Danger zone</Label>
+          <Card className="border-lane-gym/30">
+            <Text className="text-sm text-fog">
+              Deleting your account permanently removes your profile and every
+              lane, session, week, and parked thought. This cannot be undone.
+            </Text>
+            <View className="mt-4">
+              <Button
+                title={deleting ? "Deleting…" : "Delete account"}
+                variant="danger"
+                onPress={onDeleteAccount}
+                disabled={deleting}
+              />
+            </View>
+          </Card>
         </View>
       </ScrollView>
     </Screen>

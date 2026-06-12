@@ -70,7 +70,8 @@ npm run start        # Expo Go — scan the QR with the Expo Go app
 ```
 
 No native build needed — the app uses the pure-JS Firebase SDK and runs in
-**Expo Go**. Setup for real accounts (otherwise it runs in demo mode):
+**Expo Go**. Firebase is **required** (the app throws a clear setup error at
+startup if it's missing — there is no demo/offline mode):
 
 1. Copy `mobile/.env.example` → `mobile/.env` and fill the
    `EXPO_PUBLIC_FIREBASE_*` web-app config + `EXPO_PUBLIC_AUTH_BROKER_URL`.

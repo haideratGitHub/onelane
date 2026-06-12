@@ -21,7 +21,7 @@ current time as a parameter. This is what makes them deterministic and testable.
 | File | Responsibility |
 |---|---|
 | `types.ts` | All domain interfaces/types. The data shapes for the whole app. |
-| `constants.ts` | `WIN_THRESHOLD`, `MAX_REASONABLE_WEEK_HOURS`, default settings, `DEFAULT_DOMAINS`, reflection/check-in copy. |
+| `constants.ts` | `WIN_THRESHOLD`, `MAX_REASONABLE_WEEK_HOURS`, default settings, `LANE_TEMPLATES`, reflection/check-in copy. |
 | `settings.ts` | `mergeSettings(partial)` — partial/missing persisted settings → complete `UserSettings` (deep-merges `quietHours`). |
 | `week.ts` | Week identity + ranges (`getWeekId`, `weekIdToStart`, `getWeekRange`, `isInWeek`, `formatWeekRange`). |
 | `session.ts` | The timestamp-based timer: create/elapsed/pause/resume/complete/abandon + yak-shave check. |
@@ -53,8 +53,7 @@ All timestamps are **epoch ms (`number`)** — see [architecture.md](architectur
 - **`MAX_REASONABLE_WEEK_HOURS = 60`** — above this total the Plan screen shows the
   right-sizing nudge.
 - **`DEFAULT_SETTINGS`** — Monday week start, quiet hours 22:00–07:00, max 6 check-ins/day, `standard` style. The fallback base for `mergeSettings` (persisted settings overlay it).
-- **`DEFAULT_DOMAINS`** — 5 sample lanes (Office/Trading/SaaS/Learning/Gym), used **only** by demo mode's "explore with sample data" seeding. Real users start with zero lanes.
-- **`LANE_TEMPLATES`** — one-tap prefills offered by the lane editor when creating a lane (Work, Side project, Learning, Health, Creative, People I love). Prefill-only; nothing is created until the user saves.
+- **`LANE_TEMPLATES`** — one-tap prefills offered by the lane editor when creating a lane (Work, Side project, Learning, Health, Creative, People I love). Prefill-only; nothing is created until the user saves. New users start with zero lanes.
 - **`WEEKLY_REFLECTION_PROMPTS`**, **`CHECKIN_PROMPTS`** — UI copy kept here so it's consistent.
 
 ## `week.ts` — week identity

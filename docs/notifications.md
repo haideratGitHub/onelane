@@ -53,6 +53,8 @@ deliberate product choice (see the product plan and the "no FCM" decision).
   - a **block-edge** wrap-up at `startAt + planned` ("Wrap up {domain}?").
   Returns the scheduled ids → stored in `useApp.activeNudgeIds`.
 - **`cancelNudges(ids)`** (on complete/abandon): cancels the scheduled notifications.
+- **`clearAllNotifications()`**: cancels everything pending + dismisses everything
+  delivered — called on account deletion ([auth.md](auth.md)).
 - **Quiet hours / off-switch:** `scheduleAt` skips scheduling when
   `checkinStyle == "off"`, when the fire time is in the past, or when it falls within
   `quietHours` (which may wrap past midnight — handled by `isWithinQuietHours`).

@@ -20,9 +20,7 @@ import {
 } from "@/src/components/ui";
 import {
   friendlyAuthError,
-  isFirebaseConfigured,
   isGoogleSignInAvailable,
-  signInAsDemo,
   signInWithEmail,
   signInWithGoogle,
   signUpWithEmail,
@@ -77,16 +75,6 @@ export default function SignIn() {
     }
   }
 
-  async function onDemo() {
-    setLoading(true);
-    try {
-      await signInAsDemo();
-      router.replace("/");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <Screen>
       <ScreenScroll
@@ -107,15 +95,6 @@ export default function SignIn() {
         </View>
 
         <View className="gap-4">
-          {!isFirebaseConfigured && (
-            <View className="rounded-lg border border-line/30 bg-line/10 px-3 py-2">
-              <Text className="text-xs text-line">
-                Demo mode — any email and password works. Your account stays on
-                this device and resets on reload.
-              </Text>
-            </View>
-          )}
-
           <View>
             <Label>Email</Label>
             <Field
@@ -193,15 +172,6 @@ export default function SignIn() {
                 </Text>
               </Pressable>
             </>
-          )}
-
-          {!isFirebaseConfigured && (
-            <Button
-              title="Skip — explore with sample data"
-              variant="ghost"
-              onPress={onDemo}
-              disabled={loading}
-            />
           )}
         </View>
       </ScreenScroll>

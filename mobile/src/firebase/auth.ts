@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
   signInWithCustomToken,
   signInWithEmailAndPassword,
@@ -9,16 +10,7 @@ import {
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { fbAuth } from "./firebase";
-import { isFirebaseConfigured } from "./config";
-import {
-  onAuthChangedDemo,
-  seedDemoData,
-  signInDemo as demoSignIn,
-  signOutDemo,
-} from "./demo";
-import { ensureUserDoc } from "./repositories";
-
-export { isFirebaseConfigured } from "./config";
+import { deleteAllUserData, ensureUserDoc } from "./repositories";
 
 /**
  * Translate an auth failure into a sentence a person can act on. Firebase
@@ -40,6 +32,8 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
     "Too many attempts. Please wait a minute and try again.",
   "auth/network-request-failed":
     "Couldn't reach the server. Check your internet connection and try again.",
+  "auth/requires-recent-login":
+    "For security, this needs a fresh sign-in. Sign out, sign back in, and try again.",
 };
 
 export function friendlyAuthError(e: unknown): string {
@@ -58,7 +52,7 @@ export function friendlyAuthError(e: unknown): string {
 
 /**
  * The app-facing user shape — the only fields the UI reads. Decouples consumers
- * from the Firebase `User` type so demo mode (no Firebase at all) can supply one.
+ * from the Firebase `User` type.
  */
 export interface AuthUser {
   uid: string;
@@ -79,8 +73,7 @@ function toAuthUser(u: User): AuthUser {
 /**
  * Auth via the Firebase JS SDK so the app runs in Expo Go: email/password
  * directly, and Google through the server-side broker (signInWithGoogle below —
- * no native modules). With no Firebase config, the sign-in screen offers demo
- * mode instead. Every entry point upserts the user's doc (idempotent).
+ * no native modules). Every entry point upserts the user's doc (idempotent).
  * Deliberately NO lane seeding — a new user starts with zero lanes and builds
  * their own (the lane editor offers templates as a starting point).
  */
@@ -93,26 +86,11 @@ async function afterAuth(user: AuthUser): Promise<AuthUser> {
   return user;
 }
 
-/**
- * Demo fallback for the real onboarding form: with no Firebase config, any
- * credentials sign in a local fake account named after the email, so the full
- * sign-in/sign-up flow is walkable. Like a real first run, it starts with no
- * lanes (use "Skip — explore with sample data" for a seeded world).
- */
-function profileFromEmail(email: string): Partial<AuthUser> {
-  const name = email.split("@")[0] ?? "you";
-  return {
-    displayName: name.charAt(0).toUpperCase() + name.slice(1),
-    email,
-  };
-}
-
 export async function signUpWithEmail(
   email: string,
   password: string,
 ): Promise<AuthUser> {
-  if (!isFirebaseConfigured) return afterAuth(demoSignIn(profileFromEmail(email)));
-  const { user } = await createUserWithEmailAndPassword(fbAuth!, email, password);
+  const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
   return afterAuth(toAuthUser(user));
 }
 
@@ -120,18 +98,8 @@ export async function signInWithEmail(
   email: string,
   password: string,
 ): Promise<AuthUser> {
-  if (!isFirebaseConfigured) return afterAuth(demoSignIn(profileFromEmail(email)));
-  const { user } = await signInWithEmailAndPassword(fbAuth!, email, password);
+  const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
   return afterAuth(toAuthUser(user));
-}
-
-/**
- * "Explore with sample data": demo user + a fully seeded world (lanes,
- * sessions, parking) so every screen has content. Seeding is idempotent.
- */
-export async function signInAsDemo(): Promise<AuthUser> {
-  seedDemoData({ withSamples: true });
-  return afterAuth(demoSignIn());
 }
 
 /**
@@ -147,15 +115,10 @@ const AUTH_BROKER_URL = (process.env.EXPO_PUBLIC_AUTH_BROKER_URL ?? "").replace(
 );
 
 /** Whether the sign-in screen should offer the Google button. */
-export const isGoogleSignInAvailable = !isFirebaseConfigured || !!AUTH_BROKER_URL;
+export const isGoogleSignInAvailable = !!AUTH_BROKER_URL;
 
 /** Resolves to null when the user cancels/dismisses the browser sheet. */
 export async function signInWithGoogle(): Promise<AuthUser | null> {
-  if (!isFirebaseConfigured) {
-    return afterAuth(
-      demoSignIn({ displayName: "Google User", email: "you@gmail.com" }),
-    );
-  }
   if (!AUTH_BROKER_URL) {
     throw new Error(
       "Google sign-in isn't configured — set EXPO_PUBLIC_AUTH_BROKER_URL.",
@@ -179,21 +142,45 @@ export async function signInWithGoogle(): Promise<AuthUser | null> {
         : "Google sign-in failed. Please try again.",
     );
   }
-  const { user } = await signInWithCustomToken(fbAuth!, token);
+  const { user } = await signInWithCustomToken(fbAuth, token);
   return afterAuth(toAuthUser(user));
 }
 
-export async function signOutEverywhere(): Promise<void> {
-  if (!isFirebaseConfigured) {
-    signOutDemo();
-    return;
+/**
+ * Permanent account deletion: wipe all Firestore data, then the Firebase Auth
+ * user. The UI owns the "this cannot be undone" double confirmation — this
+ * function assumes consent.
+ *
+ * Firebase only deletes a user whose sign-in is RECENT, so recency is
+ * pre-checked BEFORE any data is wiped — a stale session fails fast with
+ * instructions instead of stranding a half-deleted account (data gone, login
+ * alive). Custom-token (Google-broker) users can't reauthenticate in place,
+ * so "sign out, sign back in, delete again" is the one flow that works for
+ * every provider.
+ */
+const RECENT_LOGIN_WINDOW_MS = 5 * 60 * 1000;
+
+export async function deleteAccount(): Promise<void> {
+  const user = fbAuth.currentUser;
+  if (!user) throw new Error("You're not signed in.");
+  const lastSignIn = user.metadata.lastSignInTime
+    ? Date.parse(user.metadata.lastSignInTime)
+    : 0;
+  if (Date.now() - lastSignIn > RECENT_LOGIN_WINDOW_MS) {
+    throw new Error(
+      "For security, deleting your account needs a fresh sign-in. Sign out, sign back in, then delete your account right away.",
+    );
   }
-  await signOut(fbAuth!);
+  await deleteAllUserData(user.uid);
+  await deleteUser(user); // also signs the user out → the auth gate redirects
+}
+
+export async function signOutEverywhere(): Promise<void> {
+  await signOut(fbAuth);
 }
 
 export function onAuthChanged(
   cb: (user: AuthUser | null) => void,
 ): () => void {
-  if (!isFirebaseConfigured) return onAuthChangedDemo(cb);
-  return onAuthStateChanged(fbAuth!, (u) => cb(u ? toAuthUser(u) : null));
+  return onAuthStateChanged(fbAuth, (u) => cb(u ? toAuthUser(u) : null));
 }
