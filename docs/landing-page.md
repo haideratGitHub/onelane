@@ -1,13 +1,19 @@
 # Landing Page Module (`web/`)
 
 The marketing site. A single animated page that explains what onelane does, who it's
-for, and what's unique, and drives to the App Store / Google Play. **Static, no
-backend, no waitlist** (we publish straight to the stores). Deploys to Vercel.
+for, and what's unique, and drives to the App Store / Google Play. The page itself is
+**static, no waitlist** (we publish straight to the stores). Deploys to Vercel.
+
+> The deployment also hosts the mobile app's **Google auth broker**
+> (`web/app/api/auth/google/*` + `web/lib/auth-broker.ts`, using `firebase-admin`) —
+> two server-side API routes, unrelated to the marketing page. That module is
+> documented in [auth.md](auth.md); its env vars are in `web/.env.example`.
 
 ## Stack & files
 
 Next.js 15 (App Router) + React 19, Tailwind v3, **framer-motion** (animations),
-**lucide-react** (icons). No Firebase.
+**lucide-react** (icons). **firebase-admin** is server-only, used by the auth
+broker routes ([auth.md](auth.md)); the page itself has no Firebase.
 
 | File | Role |
 |---|---|
@@ -87,12 +93,16 @@ npm run dev          # http://localhost:3000
 npm run typecheck
 npm run build        # static; current page first-load ~140 kB JS
 ```
-Deploy to Vercel (zero-config Next.js). No env vars required (no backend).
+Deploy to Vercel (zero-config Next.js). The marketing page needs no env; the
+**auth broker routes do** (`web/.env.example` → Vercel project env) — without
+them the page still builds/serves fine and only `/api/auth/google/*` fails.
 
 ## Caveats / gotchas
 
-- **No waitlist / no Firebase** anymore — `web/lib/` and the waitlist component were
-  removed. Don't reintroduce a backend dependency for a marketing page without reason.
+- **No waitlist** anymore — the waitlist component was removed. The only backend
+  in `web/` is the auth broker ([auth.md](auth.md)); keep the marketing page itself
+  free of backend dependencies, and keep the broker **auth-only** (no app data —
+  [architecture.md](architecture.md) §4).
 - **Store URLs are placeholders.**
 - **Client/server split** — keep motion in client components or the build breaks.
 - **Color drift** — the lane/brand palette must stay in sync with mobile by hand.

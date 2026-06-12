@@ -48,3 +48,6 @@ yarn-error.*
 .firebase/
 firebase-debug.log
 firestore-debug.log
+
+
+/web/onelane-dev-firebase-adminsdk-fbsvc-391164f065.json

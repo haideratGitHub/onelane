@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, Ref, useState } from "react";
 import {
   Pressable,
   Text,
@@ -7,6 +7,7 @@ import {
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
@@ -81,12 +82,49 @@ export function Button({
   );
 }
 
-export function Field(props: TextInputProps) {
+// text-[16px] (not text-base): Tailwind's text-base also sets lineHeight, which
+// makes iOS TextInput clip descenders (g, y, p). Set fontSize only.
+export function Field({
+  ref,
+  ...props
+}: TextInputProps & { ref?: Ref<TextInput> }) {
   return (
     <TextInput
+      ref={ref}
       placeholderTextColor="#9AA7B6"
-      className="rounded-xl border border-white/10 bg-slate px-4 py-3.5 text-base text-white"
+      className="rounded-xl border border-white/10 bg-slate px-4 py-3.5 text-[16px] text-white"
       {...props}
     />
+  );
+}
+
+export function PasswordField({
+  ref,
+  ...props
+}: TextInputProps & { ref?: Ref<TextInput> }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <View className="relative">
+      <TextInput
+        ref={ref}
+        placeholderTextColor="#9AA7B6"
+        secureTextEntry={!visible}
+        className="rounded-xl border border-white/10 bg-slate py-3.5 pl-4 pr-12 text-[16px] text-white"
+        {...props}
+      />
+      <Pressable
+        className="absolute bottom-0 right-0 top-0 justify-center px-4"
+        onPress={() => setVisible((v) => !v)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={visible ? "Hide password" : "Show password"}
+      >
+        <Ionicons
+          name={visible ? "eye-off-outline" : "eye-outline"}
+          size={20}
+          color="#9AA7B6"
+        />
+      </Pressable>
+    </View>
   );
 }

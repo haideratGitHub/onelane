@@ -63,14 +63,18 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
   - `mobile/` — the product. Expo (managed) SDK 54, React Native 0.81, React 19,
     TypeScript, Expo Router v6, NativeWind 4.2 (+ reanimated 4 / worklets — keep in
     lockstep, see architecture.md §3), **Firebase JS SDK** (Auth + Firestore, modular
-    API), **email/password** auth, `expo-notifications`, Zustand. Pure domain logic +
+    API), **email/password + Google** auth (Google via the broker in `web/` —
+    works in Expo Go), `expo-notifications`, Zustand. Pure domain logic +
     vitest tests in `mobile/src/domain/`. *Interim:* migrated off native modules so it
-    **runs in Expo Go** (Google Sign-In deferred to a future dev build).
-  - `web/` — Next.js 15 landing page (Tailwind, framer-motion, lucide-react). Static,
-    no backend, deploys to Vercel.
-- **No custom server.** "Backend" = Firebase accessed directly via the client SDK;
-  authorization is Firestore **security rules** (`mobile/firestore.rules`). The data
-  "API" is the functions in `mobile/src/firebase/repositories.ts`.
+    **runs in Expo Go**.
+  - `web/` — Next.js 15 landing page (Tailwind, framer-motion, lucide-react). Static
+    page + the mobile app's **Google auth broker** (`web/app/api/auth/google/*`,
+    `firebase-admin` — see [docs/auth.md](docs/auth.md)). Deploys to Vercel.
+- **No custom server for data.** "Backend" = Firebase accessed directly via the client
+  SDK; authorization is Firestore **security rules** (`mobile/firestore.rules`). The
+  data "API" is the functions in `mobile/src/firebase/repositories.ts`. The auth
+  broker in `web/` is the sole server-side piece and is **auth-only** — never grow it
+  into a data API (architecture.md §4).
 
 ## 🔑 Non-negotiable conventions (full detail in architecture.md §5)
 
@@ -93,8 +97,9 @@ a weekly plan into visible, sustainable progress. Core metaphor: each life domai
   `onSnapshot(query(...))`, `snap.exists()`), configured from `EXPO_PUBLIC_FIREBASE_*`
   env. **No env → demo mode, never a crash**: in-memory backend + sample data
   (`src/firebase/demo.ts`); every repository function short-circuits to its demo
-  counterpart — keep that pattern when adding repository functions. Re-adding native
-  Google Sign-In later **will** require a custom dev build (`npx expo run:ios|android`).
+  counterpart — keep that pattern when adding repository functions. Google sign-in
+  stays Expo Go-compatible via the server-side broker in `web/` (custom-token flow);
+  *native* Google Sign-In would require a custom dev build (`npx expo run:ios|android`).
   See [docs/auth.md](docs/auth.md).
 
 ## Commands
@@ -116,8 +121,8 @@ After domain-logic changes always run `npm test`. After any TS change, run
 
 ## Current known gaps (don't assume these exist)
 
-Auth is **interim email/password** (Google Sign-In deferred to a future dev build —
-see [docs/auth.md](docs/auth.md)); only the current week is loaded (no week switcher,
+Auth is **email/password + Google-via-broker** (native Google Sign-In would need a
+dev build — see [docs/auth.md](docs/auth.md)); only the current week is loaded (no week switcher,
 streaks not surfaced in UI); lane CRUD exists but no reorder/unarchive UI;
 notification action buttons exist but no response listener handles taps;
 single-active-session has no hard guard; store CTA links on the landing page are `#`

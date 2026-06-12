@@ -1,10 +1,13 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signOut,
   type User,
 } from "firebase/auth";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { fbAuth } from "./firebase";
 import { isFirebaseConfigured } from "./config";
 import {
@@ -38,10 +41,11 @@ function toAuthUser(u: User): AuthUser {
 }
 
 /**
- * Interim auth: email/password via the Firebase JS SDK so the app runs in Expo Go
- * (Google Sign-In is a native module / needs a custom-scheme dev build — deferred).
- * With no Firebase config, the sign-in screen offers demo mode instead (below).
- * Every entry point bootstraps the user's doc + default lanes (idempotent).
+ * Auth via the Firebase JS SDK so the app runs in Expo Go: email/password
+ * directly, and Google through the server-side broker (signInWithGoogle below —
+ * no native modules). With no Firebase config, the sign-in screen offers demo
+ * mode instead. Every entry point bootstraps the user's doc + default lanes
+ * (idempotent).
  */
 async function afterAuth(user: AuthUser): Promise<AuthUser> {
   await ensureUserDoc(user.uid, {
@@ -93,6 +97,55 @@ export async function signInWithEmail(
 export async function signInAsDemo(): Promise<AuthUser> {
   seedDemoData({ withSamples: true });
   return afterAuth(demoSignIn());
+}
+
+/**
+ * Google sign-in via the auth broker hosted in `web/` (see docs/auth.md).
+ * Expo Go can't receive a Google OAuth redirect directly (Google rejects exp://
+ * URIs), so the system browser is sent to our server, which runs the OAuth flow
+ * against Google, mints a Firebase **custom token**, and deep-links it back —
+ * we finish with signInWithCustomToken. Works in Expo Go; no native modules.
+ */
+const AUTH_BROKER_URL = (process.env.EXPO_PUBLIC_AUTH_BROKER_URL ?? "").replace(
+  /\/$/,
+  "",
+);
+
+/** Whether the sign-in screen should offer the Google button. */
+export const isGoogleSignInAvailable = !isFirebaseConfigured || !!AUTH_BROKER_URL;
+
+/** Resolves to null when the user cancels/dismisses the browser sheet. */
+export async function signInWithGoogle(): Promise<AuthUser | null> {
+  if (!isFirebaseConfigured) {
+    return afterAuth(
+      demoSignIn({ displayName: "Google User", email: "you@gmail.com" }),
+    );
+  }
+  if (!AUTH_BROKER_URL) {
+    throw new Error(
+      "Google sign-in isn't configured — set EXPO_PUBLIC_AUTH_BROKER_URL.",
+    );
+  }
+  // In Expo Go this is exp://<lan-ip>:8081/--/sign-in (a route we're already
+  // on, so the deep link is a harmless no-op navigation); in a dev/store build
+  // it's onelane://sign-in. The broker validates the scheme.
+  const returnUrl = Linking.createURL("sign-in");
+  const result = await WebBrowser.openAuthSessionAsync(
+    `${AUTH_BROKER_URL}/api/auth/google/start?return=${encodeURIComponent(returnUrl)}`,
+    returnUrl,
+  );
+  if (result.type !== "success") return null;
+  const { queryParams } = Linking.parse(result.url);
+  const token = typeof queryParams?.token === "string" ? queryParams.token : null;
+  if (!token) {
+    throw new Error(
+      typeof queryParams?.error === "string"
+        ? queryParams.error
+        : "Google sign-in failed. Please try again.",
+    );
+  }
+  const { user } = await signInWithCustomToken(fbAuth!, token);
+  return afterAuth(toAuthUser(user));
 }
 
 export async function signOutEverywhere(): Promise<void> {

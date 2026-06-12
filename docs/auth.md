@@ -1,15 +1,18 @@
 # Authentication Module
 
-Email/password sign-in via the **Firebase JS SDK**, the first-login bootstrap, the
-auth gate that protects the app, and sign-out.
+Email/password **and Google** sign-in via the **Firebase JS SDK**, the first-login
+bootstrap, the auth gate that protects the app, and sign-out. Google goes through a
+small server-side **auth broker** hosted in `web/` (see below) so it works in Expo Go.
 
 > **⚠️ Interim setup.** This module was migrated off native modules
 > (`@react-native-firebase`, `@react-native-google-signin`) to the **pure-JS Firebase
-> SDK** with **email/password** auth so the app runs in **Expo Go** (no custom dev
-> build). **Google Sign-In is deferred** — it's a native module / needs a custom-scheme
-> dev build (Expo removed the auth proxy, so Google OAuth can't redirect in Expo Go).
-> Re-adding native Google in a dev build is the planned "more robust" follow-up. See
-> [architecture.md](architecture.md) §3.
+> SDK** so the app runs in **Expo Go** (no custom dev build). Native Google Sign-In
+> can't work there (native module; and Google OAuth can't redirect to `exp://` URLs
+> since Expo removed its auth proxy) — so Google sign-in is implemented as a
+> **broker flow**: the system browser → our server (`web/app/api/auth/google/*`) →
+> Google OAuth → server mints a Firebase **custom token** (Admin SDK) → deep link
+> back → `signInWithCustomToken`. Re-adding *native* Google in a dev build remains
+> an optional follow-up. See [architecture.md](architecture.md) §3.
 
 ## Files
 
@@ -17,11 +20,14 @@ auth gate that protects the app, and sign-out.
 |---|---|
 | `mobile/src/firebase/config.ts` | Reads `EXPO_PUBLIC_FIREBASE_*` env → `firebaseConfig` + the `isFirebaseConfigured` flag. |
 | `mobile/src/firebase/firebase.ts` | **Conditionally** initializes the Firebase JS SDK (only when configured — exports are `null` otherwise, no crash); `fbAuth` (AsyncStorage persistence) + `db` (long-polling Firestore). |
-| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`; defines the app-facing **`AuthUser`** type. |
+| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInWithGoogle` (+ `isGoogleSignInAvailable`), `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`; defines the app-facing **`AuthUser`** type. |
+| `web/lib/auth-broker.ts` | Broker helpers: HMAC-signed OAuth `state` (carries the app's return deep link; 10-min expiry; allowed schemes `exp://`/`exps://`/`onelane://`), lazy `firebase-admin` init, `upsertFirebaseUser` (find-or-create by email). |
+| `web/app/api/auth/google/start/route.ts` | Validates the `return` deep link and redirects the system browser to Google's consent screen (server is the OAuth `redirect_uri`). |
+| `web/app/api/auth/google/callback/route.ts` | Exchanges the code, checks `aud`/`iss`/`email_verified` on the id_token, upserts the Firebase user, mints a **custom token**, deep-links it (or an `?error=`) back into the app. |
 | `mobile/src/firebase/demo.ts` | **Demo mode**: in-memory auth + data backend with seeded sample data, used when Firebase isn't configured. |
 | `mobile/src/store/useAuth.ts` | Zustand store holding `{ user, initializing }` + `useAuthListener()`. `user` is **`AuthUser`** (decoupled from Firebase types). |
 | `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, gates the splash on `initializing`. |
-| `mobile/app/sign-in.tsx` | The sign-in screen: email + password form with a Sign in / Create account toggle. |
+| `mobile/app/sign-in.tsx` | The sign-in screen: email + password form with a Sign in / Create account toggle. Keyboard-aware: `KeyboardAvoidingView` (iOS `padding`) + `ScrollView` with `keyboardShouldPersistTaps="handled"`, return-key chaining (email → password → submit). Password uses `PasswordField` (eye toggle). |
 | `mobile/app/(app)/_layout.tsx` | **Auth gate**: redirects to `/sign-in` when there's no user. |
 | `mobile/app/(app)/profile.tsx` | Profile tab: identity card, app settings, and the "Sign out" button (with confirmation). |
 | `mobile/app.config.ts` | Expo config — no native auth plugins anymore (Firebase is configured at runtime from env). |
@@ -45,10 +51,17 @@ auth gate that protects the app, and sign-out.
    splash hides.
 3. **Routing**: `app/index` doesn't exist; `/` resolves to `(app)/index`, whose
    layout (`(app)/_layout.tsx`) checks `useAuth.user`. **No user → `<Redirect href="/sign-in" />`.**
-4. **Sign-in screen** → user enters email + password and taps Sign in / Create account:
+4. **Sign-in screen** → user enters email + password and taps Sign in / Create
+   account, **or taps "Continue with Google"**:
    - `signInWithEmail` → `signInWithEmailAndPassword(fbAuth, …)`, or
-   - `signUpWithEmail` → `createUserWithEmailAndPassword(fbAuth, …)`.
-   - Both then run `ensureUserDoc(uid, profile)` (merge) + `bootstrapDomains(uid)`
+   - `signUpWithEmail` → `createUserWithEmailAndPassword(fbAuth, …)`, or
+   - `signInWithGoogle` → `WebBrowser.openAuthSessionAsync` to
+     `${EXPO_PUBLIC_AUTH_BROKER_URL}/api/auth/google/start?return=<deep link>`
+     (return = `Linking.createURL("sign-in")` — `exp://…/--/sign-in` in Expo Go,
+     `onelane://sign-in` in builds). The broker runs Google OAuth server-side and
+     redirects back with `?token=<custom token>` → `signInWithCustomToken(fbAuth, token)`.
+     Cancelling the browser sheet resolves to `null` (no error alert).
+   - All then run `ensureUserDoc(uid, profile)` (merge) + `bootstrapDomains(uid)`
      (idempotent) via the shared `afterAuth` helper.
 5. `onAuthStateChanged` fires → `useAuth.user` set → `(app)` gate now renders the
    Tabs; `useAppSync(uid)` (in the same layout) starts the Firestore listeners.
@@ -64,7 +77,8 @@ sign-in screen still shows the **real onboarding form** (with a small demo banne
 `signInWithEmail`/`signUpWithEmail` fall back to `demoSignIn(profileFromEmail(email))`
 — any credentials work, the local `AuthUser` (`uid:"demo"`) takes its displayName
 from the email prefix, and `afterAuth` seeds the **default lanes only** (clean
-first-run feel). A tertiary "Skip — explore with sample data" button calls
+first-run feel). "Continue with Google" likewise falls back to a fake local Google
+user (no browser round-trip). A tertiary "Skip — explore with sample data" button calls
 `signInAsDemo()`, which seeds the full sample world (sessions + parking) via
 `seedDemoData({withSamples:true})`. Nothing persists or syncs; data resets on reload.
 
@@ -87,13 +101,49 @@ real sign-in works (otherwise demo mode):
 3. **Deploy security rules** (`mobile/firestore.rules`) so `users/{uid}` is writable
    only by that uid: `firebase deploy --only firestore:rules` (rules unchanged).
 
+**Additionally, for Google sign-in** (the broker in `web/`):
+
+4. **Enable Google** in Firebase console → Authentication → Sign-in method (done).
+5. **Broker env** (`web/.env.example` → Vercel project env / `web/.env.local`):
+   `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` (the Google **web**
+   client — Firebase console → Google provider → "Web SDK configuration") and
+   `FIREBASE_SERVICE_ACCOUNT` (Project settings → Service accounts → generate key;
+   raw JSON or base64). Optional: `AUTH_BROKER_ORIGIN`, `AUTH_STATE_SECRET`.
+6. **Authorized redirect URI** on that Google web client (Google Cloud console →
+   Credentials): `https://<web-domain>/api/auth/google/callback` — plus
+   `http://localhost:3000/api/auth/google/callback` for local dev.
+7. **Point the app at the broker**: `EXPO_PUBLIC_AUTH_BROKER_URL` in `mobile/.env`
+   (the deployed `web/` URL). It must be **public https** — Google rejects private
+   LAN IPs as redirect URIs, and `localhost` on the phone is the phone itself; for
+   pre-deploy testing, tunnel `web/` (e.g. `ngrok http 3000`) and register the
+   tunnel's callback URL. Empty → the Google button is hidden. Env is inlined at
+   bundle time — restart `npm run start` after changing it.
+
 ## Features / behaviors
 
-- **Single provider (interim): email/password.** No Google/Apple/social yet.
+- **Providers: email/password + Google** (via the broker — no native modules,
+  works in Expo Go). No Apple yet.
+- **Google ↔ email/password share an account**: the broker upserts the Firebase
+  user **by email** (`upsertFirebaseUser`), so signing in with Google after
+  email/password (same address) lands in the same uid / same Firestore data.
+- **Google button visibility** — `isGoogleSignInAvailable`: shown in demo mode
+  (fake local Google user) or when `EXPO_PUBLIC_AUTH_BROKER_URL` is set; hidden
+  when Firebase is configured but no broker URL is.
 - **First-login bootstrap** seeds default lanes so the app isn't empty.
 - **`onAuthChanged`** is the single source of auth truth; everything reacts to it.
 - **Splash gating** prevents a sign-in flash before Firebase restores the session.
 - **AsyncStorage persistence** keeps the user signed in across reloads/relaunches.
+- **Keyboard-aware sign-in form** — the form scrolls above the keyboard
+  (`KeyboardAvoidingView` + `ScrollView`), buttons stay tappable while the keyboard
+  is open (`keyboardShouldPersistTaps="handled"`), tapping/dragging outside an input
+  dismisses it, and the return key chains email → password → submit. `Field` (in
+  `components/ui.tsx`) accepts a `ref` (React 19 ref-as-prop) for the focus chain.
+- **Show/hide password** — `PasswordField` (`components/ui.tsx`) wraps the input
+  with an Ionicons eye toggle (`@expo/vector-icons`, bundled with Expo) and owns
+  `secureTextEntry` itself; don't pass it from the caller.
+- **TextInput font-size gotcha** — `Field`/`PasswordField` use `text-[16px]`, not
+  `text-base`: Tailwind's `text-base` also sets `lineHeight`, which makes iOS
+  `TextInput` clip descenders (g, y, p). Keep fontSize-only classes on inputs.
 
 ## Caveats / gotchas
 
@@ -108,11 +158,24 @@ real sign-in works (otherwise demo mode):
   Plan screen when Profile was added).
 - **Error surfacing** — sign-in/up errors are shown via `Alert` with the Firebase
   error message (e.g. wrong-password, email-already-in-use). Fine for the interim app.
+  Broker failures come back as `?error=` on the deep link and alert the same way.
+- **Custom-token users have no `google.com` providerData** — the broker mints a
+  custom token rather than linking the Google provider, so Firebase shows the user
+  as "custom" auth. Profile fields (displayName/photo) are set on the user record
+  by `upsertFirebaseUser`. If real provider linkage ever matters, that's the native
+  dev-build follow-up.
+- **The custom token rides the deep link's query string** (~1 min validity, single
+  use, only over the broker→app redirect). The broker refuses non-app return
+  schemes, so it can't be pointed at an attacker URL; an invalid/expired `state`
+  is a hard 400 (the return URL itself can't be trusted then).
+- **`WebBrowser.maybeCompleteAuthSession()`** is called at module top of
+  `sign-in.tsx` — keep it if the screen is ever split up.
 
 ## Known gaps
 
-- **Google sign-in deferred** — returns with a native dev build (the "more robust"
-  follow-up).
+- **Native Google Sign-In** (account picker sheet, real `google.com` provider
+  linkage) — optional follow-up in a custom dev build; the broker flow covers
+  Google sign-in until then.
 - No password reset, account deletion, re-auth, or profile editing.
 - No Apple sign-in.
 - User settings (week start, quiet hours) aren't loaded/saved (see [architecture.md](architecture.md) §10).
@@ -121,6 +184,8 @@ real sign-in works (otherwise demo mode):
 
 ## 📌 Keeping this doc in sync (read me, Claude)
 Update this when you touch sign-in/out, the auth gate, the bootstrap, the
-`users/{uid}` shape, the Firebase JS SDK init, or the env config for auth. If/when
-Google sign-in is re-added (dev build), document the native config + env it needs.
+`users/{uid}` shape, the Firebase JS SDK init, the env config for auth, **or the
+Google auth broker in `web/`** (routes, state signing, upsert semantics — keep the
+mobile flow and broker described here in lockstep). If native Google sign-in is
+ever added (dev build), document the native config + env it needs.
 Full protocol in [README.md](README.md).

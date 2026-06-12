@@ -48,7 +48,7 @@ pnpm.
 - **Expo Router** (file-based routing) — `mobile/app/`.
 - **NativeWind v4.2** (Tailwind for RN) — styling via `className`. Config in `mobile/tailwind.config.js`, directives in `mobile/global.css`, wired through `metro.config.js` + `babel.config.js`. ⚠️ **NativeWind ↔ reanimated coupling:** NativeWind 4.2.x's Babel preset unconditionally adds `react-native-worklets/plugin`, which exists only with **reanimated 4** (`react-native-worklets` is installed; reanimated 4's own `/plugin` just forwards to it). Keep the three in lockstep — NativeWind 4.1.x ↔ reanimated 3, NativeWind 4.2.x ↔ reanimated 4 + worklets. `babel.config.js` deliberately has **no explicit reanimated plugin entry** (the NativeWind preset provides it; adding it again risks a duplicate-plugin error).
 - **Firebase JS SDK** (`firebase`) — Auth + Firestore, **modular API** (e.g. `collection(db, …)`, `onSnapshot(query(...))`). *Interim:* migrated off the native `@react-native-firebase` so the app runs in Expo Go. Configured at runtime from `EXPO_PUBLIC_FIREBASE_*` env (no native config file). See [auth.md](auth.md) / [data-firestore.md](data-firestore.md).
-- **Auth: email/password** (interim). Google Sign-In was a native module — deferred to a future dev build.
+- **Auth: email/password + Google** — both via the Firebase JS SDK (no native modules). Google goes through the **auth broker** hosted in `web/` (server-side OAuth → Firebase custom token → `signInWithCustomToken`), so it works in Expo Go. See [auth.md](auth.md).
 - **`expo-notifications`** — local scheduled notifications only (no FCM).
 - **Zustand** — app state. **No Redux, no TanStack Query** (Firestore listeners are the live data source).
 - Pure domain logic in `mobile/src/domain/` (framework-free, unit-tested with **vitest**).
@@ -56,7 +56,9 @@ pnpm.
 **web/**
 - Next.js 15 (App Router) + React 19, TypeScript.
 - Tailwind v3, **framer-motion** (animations), **lucide-react** (icons).
-- No Firebase, no backend — fully static; deploys to Vercel.
+- Marketing page is fully static; deploys to Vercel. Plus one server-side piece:
+  the **Google auth broker** (`web/app/api/auth/google/*` + `web/lib/auth-broker.ts`,
+  `firebase-admin`) that the mobile app uses for Google sign-in — see [auth.md](auth.md).
 
 ### ✅ Runs in Expo Go (interim)
 The app was migrated off native modules to the pure-JS Firebase SDK + email/password
@@ -64,13 +66,15 @@ auth, so it now runs in **Expo Go**: `cd mobile && npm run start`, then scan the
 with the Expo Go app. No custom dev build needed. (`expo-dev-client` was removed and
 the `start` script is plain `expo start` so the QR is Expo-Go-scannable.)
 
-**The "more robust" follow-up** is to re-add native Google Sign-In, which *does*
-require a custom dev build (`npx expo run:ios` / `run:android` or EAS) — Google OAuth
-can't redirect in Expo Go since Expo removed its auth proxy. When that happens, this
-section and [auth.md](auth.md) get the native config files + the dev-build workflow
-back.
+**Google sign-in works in Expo Go anyway** via the auth broker in `web/`: Google
+OAuth can't redirect to `exp://` URLs (and Expo removed its auth proxy), so the
+system browser is sent to our server, which completes OAuth and deep-links a
+Firebase **custom token** back into the app ([auth.md](auth.md)). The optional
+"more robust" follow-up remains native Google Sign-In in a custom dev build
+(`npx expo run:ios` / `run:android` or EAS); if that happens, this section and
+[auth.md](auth.md) get the native config files + dev-build workflow back.
 
-## 4. There is no API server
+## 4. There is no API server (for data)
 
 All data access is the Firebase **client SDK** talking straight to Firestore.
 Authorization is enforced by **Firestore security rules** (`mobile/firestore.rules`),
@@ -78,6 +82,11 @@ not by a server. The app's "data API" is the set of functions in
 `mobile/src/firebase/repositories.ts`. When a doc says "endpoint", it means one of
 those functions and the Firestore operation it runs. Details in
 [data-firestore.md](data-firestore.md).
+
+The one server-side exception is **auth-only**: the Google sign-in broker in
+`web/` ([auth.md](auth.md)) holds the service-account key and mints custom
+tokens. It never reads or writes app data — don't grow it into a data API
+(that would forfeit live sync, offline, and the rules-as-authorization model).
 
 ## 5. 🔑 Load-bearing conventions
 
@@ -189,7 +198,7 @@ npm install
 npm test                 # vitest — domain logic (34 tests)
 npm run typecheck        # tsc --noEmit
 npm run start            # Expo Go: scan the QR (interim — no native modules)
-# npx expo run:ios       # only needed once native Google Sign-In returns (dev build)
+# npx expo run:ios       # only needed if native modules are ever added (dev build)
 
 # Web
 cd web
@@ -201,9 +210,11 @@ npm run typecheck
 
 Before running mobile (Expo Go): copy `mobile/.env.example` → `.env` and fill the
 `EXPO_PUBLIC_FIREBASE_*` Web config, enable Email/Password in the Firebase console,
-and deploy `mobile/firestore.rules`. (No `GoogleService-Info.plist` /
-`google-services.json` needed while on the JS SDK — those return only when native
-Google Sign-In does, in a dev build.) See [auth.md](auth.md) and
+and deploy `mobile/firestore.rules`. For Google sign-in, also set
+`EXPO_PUBLIC_AUTH_BROKER_URL` and configure the broker env in `web/`
+([auth.md](auth.md)). (No `GoogleService-Info.plist` / `google-services.json`
+needed while on the JS SDK — those return only with *native* Google Sign-In, in
+a dev build.) See [auth.md](auth.md) and
 [data-firestore.md](data-firestore.md).
 
 ## 10. Known gaps (system-wide)
