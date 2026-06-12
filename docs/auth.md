@@ -20,14 +20,14 @@ small server-side **auth broker** hosted in `web/` (see below) so it works in Ex
 |---|---|
 | `mobile/src/firebase/config.ts` | Reads `EXPO_PUBLIC_FIREBASE_*` env → `firebaseConfig` + the `isFirebaseConfigured` flag. |
 | `mobile/src/firebase/firebase.ts` | **Conditionally** initializes the Firebase JS SDK (only when configured — exports are `null` otherwise, no crash); `fbAuth` (AsyncStorage persistence) + `db` (long-polling Firestore). |
-| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInWithGoogle` (+ `isGoogleSignInAvailable`), `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`; defines the app-facing **`AuthUser`** type. |
+| `mobile/src/firebase/auth.ts` | `signUpWithEmail`, `signInWithEmail`, `signInWithGoogle` (+ `isGoogleSignInAvailable`), `signInAsDemo`, `signOutEverywhere`, `onAuthChanged`, `friendlyAuthError` (maps Firebase `auth/*` codes → human sentences); defines the app-facing **`AuthUser`** type. |
 | `web/lib/auth-broker.ts` | Broker helpers: HMAC-signed OAuth `state` (carries the app's return deep link; 10-min expiry; allowed schemes `exp://`/`exps://`/`onelane://`), lazy `firebase-admin` init, `upsertFirebaseUser` (find-or-create by email). |
 | `web/app/api/auth/google/start/route.ts` | Validates the `return` deep link and redirects the system browser to Google's consent screen (server is the OAuth `redirect_uri`). |
 | `web/app/api/auth/google/callback/route.ts` | Exchanges the code, checks `aud`/`iss`/`email_verified` on the id_token, upserts the Firebase user, mints a **custom token**, deep-links it (or an `?error=`) back into the app. |
 | `mobile/src/firebase/demo.ts` | **Demo mode**: in-memory auth + data backend with seeded sample data, used when Firebase isn't configured. |
 | `mobile/src/store/useAuth.ts` | Zustand store holding `{ user, initializing }` + `useAuthListener()`. `user` is **`AuthUser`** (decoupled from Firebase types). |
 | `mobile/app/_layout.tsx` | Mounts `useAuthListener()`, gates the splash on `initializing`. |
-| `mobile/app/sign-in.tsx` | The sign-in screen: email + password form with a Sign in / Create account toggle. Keyboard-aware: `KeyboardAvoidingView` (iOS `padding`) + `ScrollView` with `keyboardShouldPersistTaps="handled"`, return-key chaining (email → password → submit). Password uses `PasswordField` (eye toggle). |
+| `mobile/app/sign-in.tsx` | The sign-in screen: a **centered, minimal brand block** (logo mark + "onelane" + the one-line tagline — no marketing paragraph; the landing page carries that) above the email + password form with a Sign in / Create account toggle. Keyboard-aware via the shared `ScreenScroll` primitive (`components/ui.tsx`), return-key chaining (email → password → submit). Password uses `PasswordField` (eye toggle). |
 | `mobile/app/(app)/_layout.tsx` | **Auth gate**: redirects to `/sign-in` when there's no user. |
 | `mobile/app/(app)/profile.tsx` | Profile tab: identity card, app settings, and the "Sign out" button (with confirmation). |
 | `mobile/app.config.ts` | Expo config — no native auth plugins anymore (Firebase is configured at runtime from env). |
@@ -38,8 +38,10 @@ small server-side **auth broker** hosted in `web/` (see below) so it works in Ex
 - **Firestore `users/{uid}`** — `{ profile: { displayName, email, photoURL } }`,
   written (merged) on every sign-in/up by `ensureUserDoc` (in `repositories.ts`).
   (For email/password, `displayName`/`photoURL` are typically `null`.)
-- **`users/{uid}/domains/*`** — seeded once on first login by `bootstrapDomains`
-  (writes `DEFAULT_DOMAINS`). See [weekly-plan.md](weekly-plan.md) / [data-firestore.md](data-firestore.md).
+- **No lane seeding.** New users deliberately start with **zero lanes** and build
+  their own (the lane editor offers `LANE_TEMPLATES` as prefills). The old
+  `bootstrapDomains`/default-lanes seeding was removed. See
+  [weekly-plan.md](weekly-plan.md).
 
 ## End-to-end flow
 
@@ -61,8 +63,8 @@ small server-side **auth broker** hosted in `web/` (see below) so it works in Ex
      `onelane://sign-in` in builds). The broker runs Google OAuth server-side and
      redirects back with `?token=<custom token>` → `signInWithCustomToken(fbAuth, token)`.
      Cancelling the browser sheet resolves to `null` (no error alert).
-   - All then run `ensureUserDoc(uid, profile)` (merge) + `bootstrapDomains(uid)`
-     (idempotent) via the shared `afterAuth` helper.
+   - All then run `ensureUserDoc(uid, profile)` (merge) via the shared
+     `afterAuth` helper. No lane seeding (see "Data touched").
 5. `onAuthStateChanged` fires → `useAuth.user` set → `(app)` gate now renders the
    Tabs; `useAppSync(uid)` (in the same layout) starts the Firestore listeners.
 6. **Sign-out** (Profile tab → confirmation Alert → `signOutEverywhere`): `signOut(fbAuth)` → listener sets
@@ -76,10 +78,10 @@ delegates to `demo.ts` (in-memory backend, same observe/write contracts). The
 sign-in screen still shows the **real onboarding form** (with a small demo banner):
 `signInWithEmail`/`signUpWithEmail` fall back to `demoSignIn(profileFromEmail(email))`
 — any credentials work, the local `AuthUser` (`uid:"demo"`) takes its displayName
-from the email prefix, and `afterAuth` seeds the **default lanes only** (clean
-first-run feel). "Continue with Google" likewise falls back to a fake local Google
+from the email prefix, and — like a real first run — **no lanes are seeded**. "Continue
+with Google" likewise falls back to a fake local Google
 user (no browser round-trip). A tertiary "Skip — explore with sample data" button calls
-`signInAsDemo()`, which seeds the full sample world (sessions + parking) via
+`signInAsDemo()`, which seeds the full sample world (lanes + sessions + parking) via
 `seedDemoData({withSamples:true})`. Nothing persists or syncs; data resets on reload.
 
 Caveats: the demo uid is always `"demo"` and the in-memory world is shared for the
@@ -87,6 +89,11 @@ JS session — signing out and back in with a different email reuses the same da
 (`seedDemoData` is idempotent).
 
 ## Configuration & prerequisites (for real accounts)
+
+> **Dev vs prod:** the root [README's "Auth environments"](../README.md#auth-environments-dev-now--prod-later)
+> section is the runbook for which Firebase project / Vercel env / Google client
+> belongs to which environment (dev = Vercel Preview + `dev` branch broker URL;
+> prod = Vercel Production at launch). The steps below apply per environment.
 
 Pure-JS Firebase SDK → **runs in Expo Go** (`npm run start`, scan the QR). Before
 real sign-in works (otherwise demo mode):
@@ -129,14 +136,20 @@ real sign-in works (otherwise demo mode):
 - **Google button visibility** — `isGoogleSignInAvailable`: shown in demo mode
   (fake local Google user) or when `EXPO_PUBLIC_AUTH_BROKER_URL` is set; hidden
   when Firebase is configured but no broker URL is.
-- **First-login bootstrap** seeds default lanes so the app isn't empty.
+- **First-login bootstrap is the user doc only** — no default lanes; the new user
+  builds their own (templates in the lane editor help).
 - **`onAuthChanged`** is the single source of auth truth; everything reacts to it.
 - **Splash gating** prevents a sign-in flash before Firebase restores the session.
 - **AsyncStorage persistence** keeps the user signed in across reloads/relaunches.
-- **Keyboard-aware sign-in form** — the form scrolls above the keyboard
-  (`KeyboardAvoidingView` + `ScrollView`), buttons stay tappable while the keyboard
-  is open (`keyboardShouldPersistTaps="handled"`), tapping/dragging outside an input
-  dismisses it, and the return key chains email → password → submit. `Field` (in
+- **Friendly error copy** — every sign-in/up failure goes through
+  `friendlyAuthError` (auth.ts): known `auth/*` codes map to plain, actionable
+  sentences ("That email already has an account. Try signing in instead."); unknown
+  errors get a generic fallback. **Never show raw Firebase messages** ("Firebase:
+  Error (auth/…)") to users.
+- **Keyboard-aware sign-in form** — uses the shared `ScreenScroll` primitive
+  (`components/ui.tsx`; see [architecture.md](architecture.md) §8.1): the focused
+  input scrolls above the keyboard, buttons stay tappable while it's open, and the
+  return key chains email → password → submit. `Field` (in
   `components/ui.tsx`) accepts a `ref` (React 19 ref-as-prop) for the focus chain.
 - **Show/hide password** — `PasswordField` (`components/ui.tsx`) wraps the input
   with an Ionicons eye toggle (`@expo/vector-icons`, bundled with Expo) and owns
@@ -156,9 +169,10 @@ real sign-in works (otherwise demo mode):
   don't add a second code path that leaves it stuck true (splash would hang).
 - **Sign-out lives on the Profile tab** behind a confirmation Alert (moved from the
   Plan screen when Profile was added).
-- **Error surfacing** — sign-in/up errors are shown via `Alert` with the Firebase
-  error message (e.g. wrong-password, email-already-in-use). Fine for the interim app.
-  Broker failures come back as `?error=` on the deep link and alert the same way.
+- **Error surfacing** — sign-in/up errors are shown via `Alert`, always passed
+  through `friendlyAuthError` (never the raw Firebase message). Broker failures come
+  back as `?error=` on the deep link; those strings are broker-authored (already
+  human-readable) but still flow through the same alert path.
 - **Custom-token users have no `google.com` providerData** — the broker mints a
   custom token rather than linking the Google provider, so Firebase shows the user
   as "custom" auth. Profile fields (displayName/photo) are set on the user record

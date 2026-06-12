@@ -121,10 +121,10 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 
 /**
- * Seed the demo world once (idempotent) — called via bootstrapDomains on
- * sign-in. The plain onboarding path seeds default lanes only (real first-run
- * feel); `withSamples` (the "explore with sample data" path) also seeds a few
- * finished sessions and parking items so every screen has content.
+ * Seed the demo world once (idempotent) — only the "Skip — explore with sample
+ * data" path calls this (with `withSamples`): sample lanes plus a few finished
+ * sessions and parking items so every screen has content. The plain demo
+ * onboarding path seeds nothing, matching a real first run (zero lanes).
  */
 export function seedDemoData(opts?: { withSamples?: boolean }): void {
   if (domains.size > 0) return;
@@ -274,6 +274,12 @@ export function observeActiveSessionDemo(
   activeSessionListeners.add(cb);
   cb(activeSessionSnapshot());
   return () => activeSessionListeners.delete(cb);
+}
+
+export async function fetchSessionsForDomainDemo(
+  domainId: string,
+): Promise<Session[]> {
+  return [...sessions.values()].filter((s) => s.domainId === domainId);
 }
 
 export function observeSessionsForWeekDemo(

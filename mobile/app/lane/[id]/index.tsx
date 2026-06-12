@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { View, Text, Pressable, ScrollView, Alert } from "react-native";
+import { View, Text, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   Screen,
+  ScreenScroll,
   Heading,
   Muted,
   Button,
@@ -10,6 +11,7 @@ import {
   Label,
 } from "@/src/components/ui";
 import { useApp } from "@/src/store/useApp";
+import { LANE_TEMPLATES } from "@/src/domain";
 import { LANE_ICONS, LANE_PALETTE, laneColor } from "@/src/theme";
 import { formatHours } from "@/src/utils/format";
 
@@ -43,6 +45,15 @@ export default function LaneEditor() {
   const [busy, setBusy] = useState(false);
 
   const canSave = name.trim().length > 0 && !busy;
+
+  // Templates only prefill the form — every field stays editable and nothing
+  // is created until Save, so they never get in the way of a custom lane.
+  function applyTemplate(t: (typeof LANE_TEMPLATES)[number]) {
+    setName(t.name);
+    setIcon(t.icon);
+    setColor(t.color);
+    setHours(t.weeklyTargetHours);
+  }
 
   async function onSave() {
     setBusy(true);
@@ -110,13 +121,48 @@ export default function LaneEditor() {
 
   return (
     <Screen>
-      <ScrollView contentContainerClassName="px-5 pb-10 pt-3">
+      <ScreenScroll contentContainerClassName="px-5 pb-10 pt-3">
         <Heading>{isNew ? "New lane" : "Edit lane"}</Heading>
         <Muted>
           {isNew
             ? "A lane is one life domain you protect time for."
             : "Rename, restyle, or right-size this lane."}
         </Muted>
+
+        {isNew && (
+          <View className="mt-6">
+            <Label>Need a spark? Tap a template</Label>
+            <View className="flex-row flex-wrap gap-2">
+              {LANE_TEMPLATES.map((t) => {
+                const selected = t.name === name && t.icon === icon;
+                return (
+                  <Pressable
+                    key={t.name}
+                    onPress={() => applyTemplate(t)}
+                    className="rounded-full border px-4 py-2"
+                    style={{
+                      borderColor: selected ? t.color : "rgba(255,255,255,0.12)",
+                      backgroundColor: selected ? `${t.color}22` : "transparent",
+                    }}
+                  >
+                    <Text
+                      className="text-sm font-medium"
+                      style={{ color: selected ? t.color : "#9AA7B6" }}
+                    >
+                      {t.icon} {t.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View className="mt-2">
+              <Muted>
+                Templates just fill things in — tweak anything below, or ignore
+                them and build your own.
+              </Muted>
+            </View>
+          </View>
+        )}
 
         <View className="mt-6">
           <Label>Name</Label>
@@ -201,11 +247,18 @@ export default function LaneEditor() {
             disabled={!canSave}
           />
           <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+          {!isNew && existing && (
+            <Button
+              title="View session history"
+              variant="ghost"
+              onPress={() => router.push(`/lane/${existing.id}/history`)}
+            />
+          )}
           {!isNew && (
             <Button title="Archive lane" variant="danger" onPress={onArchive} />
           )}
         </View>
-      </ScrollView>
+      </ScreenScroll>
     </Screen>
   );
 }

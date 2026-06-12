@@ -20,7 +20,17 @@ export const dynamic = "force-dynamic";
  * can't be trusted.
  */
 export async function GET(req: NextRequest) {
-  const returnUrl = verifyState(req.nextUrl.searchParams.get("state") ?? "");
+  let returnUrl: string | null;
+  try {
+    returnUrl = verifyState(req.nextUrl.searchParams.get("state") ?? "");
+  } catch (e) {
+    // verifyState needs the state secret env — surface misconfiguration
+    // instead of Next.js prod's blank 500.
+    return new NextResponse(
+      `Auth broker misconfigured: ${e instanceof Error ? e.message : String(e)}`,
+      { status: 500 },
+    );
+  }
   if (!returnUrl) {
     return new NextResponse("Invalid or expired sign-in state. Please try again.", {
       status: 400,

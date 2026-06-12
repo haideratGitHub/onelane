@@ -19,6 +19,7 @@ import {
 import {
   createDomain,
   createSession,
+  fetchSessionsForDomain,
   newSessionId,
   observeDomains,
   observeOpenParking,
@@ -36,6 +37,8 @@ import {
 import {
   scheduleSessionNudges,
   cancelNudges,
+  presentSessionNotification,
+  dismissSessionNotification,
 } from "@/src/notifications/notifications";
 
 interface StartArgs {
@@ -86,6 +89,8 @@ interface AppState {
   ) => Promise<{ ok: boolean; reason?: "active-session" }>;
   /** Hours logged against a lane this week (for archive warnings etc.). */
   loggedHoursFor: (id: string) => number;
+  /** One-shot fetch of a lane's finished blocks, newest first (history screen). */
+  fetchLaneHistory: (domainId: string) => Promise<Session[]>;
   updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
   startSession: (args: StartArgs) => Promise<void>;
   pauseActive: () => Promise<void>;
@@ -175,6 +180,16 @@ export const useApp = create<AppState>((set, get) => ({
     return actualHoursByDomain(weekSessions, Date.now())[id] ?? 0;
   },
 
+  fetchLaneHistory: async (domainId) => {
+    const { uid } = get();
+    if (!uid) return [];
+    const all = await fetchSessionsForDomain(uid, domainId);
+    // History = finished blocks; the active one is visible on Today/session.
+    return all
+      .filter((s) => s.status !== "active")
+      .sort((a, b) => b.startAt - a.startAt);
+  },
+
   updateSettings: async (patch) => {
     const { uid, settings } = get();
     if (!uid) return;
@@ -202,6 +217,8 @@ export const useApp = create<AppState>((set, get) => ({
     const name = domainById(domainId)?.name ?? "this lane";
     const ids = await scheduleSessionNudges(session, name, settings).catch(() => []);
     set({ activeNudgeIds: ids });
+    // Lock-screen card for the block (park-a-thought action lives on it).
+    await presentSessionNotification(session, name).catch(() => {});
   },
 
   pauseActive: async () => {
@@ -227,6 +244,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeSession: null, activeNudgeIds: [] });
     await updateSession(uid, next);
     await cancelNudges(activeNudgeIds).catch(() => {});
+    await dismissSessionNotification(activeSession.id).catch(() => {});
   },
 
   abandonActive: async () => {
@@ -236,6 +254,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeSession: null, activeNudgeIds: [] });
     await updateSession(uid, next);
     await cancelNudges(activeNudgeIds).catch(() => {});
+    await dismissSessionNotification(activeSession.id).catch(() => {});
   },
 
   parkDistraction: async (text) => {

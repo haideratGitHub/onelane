@@ -1,9 +1,11 @@
 import { ReactNode, Ref, useState } from "react";
 import {
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
+  type ScrollViewProps,
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,6 +16,26 @@ export function Screen({ children }: { children: ReactNode }) {
     <SafeAreaView className="flex-1 bg-ink" edges={["top"]}>
       {children}
     </SafeAreaView>
+  );
+}
+
+/**
+ * The scroll container for any screen with text inputs. Keyboard-aware by
+ * default: iOS scrolls the focused input above the keyboard
+ * (automaticallyAdjustKeyboardInsets); Android resizes the window (Expo's
+ * default softwareKeyboardLayoutMode). Buttons stay tappable while the
+ * keyboard is open. Use this instead of a bare ScrollView wherever a Field
+ * could end up behind the keyboard.
+ */
+export function ScreenScroll(props: ScrollViewProps) {
+  return (
+    <ScrollView
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      showsVerticalScrollIndicator={false}
+      {...props}
+    />
   );
 }
 

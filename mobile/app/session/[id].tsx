@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { View, Text, Pressable, Alert, ScrollView } from "react-native";
 import { router, Redirect } from "expo-router";
-import { Screen, Heading, Muted, Button, Field, Label, Card } from "@/src/components/ui";
+import {
+  Screen,
+  ScreenScroll,
+  Heading,
+  Muted,
+  Button,
+  Field,
+  Label,
+  Card,
+} from "@/src/components/ui";
 import { useApp } from "@/src/store/useApp";
 import { useElapsed } from "@/src/hooks/useElapsed";
 import { hasOverrun, isPaused } from "@/src/domain";
@@ -53,7 +62,7 @@ export default function SessionScreen() {
   if (closing) {
     return (
       <Screen>
-        <ScrollView contentContainerClassName="px-5 pb-10 pt-4">
+        <ScreenScroll contentContainerClassName="px-5 pb-10 pt-4">
           <Heading>What got done?</Heading>
           <Muted>One line. This is your record — closure for the block.</Muted>
           <View className="mt-5">
@@ -69,7 +78,7 @@ export default function SessionScreen() {
             <Button title="Close the block" onPress={onComplete} />
             <Button title="Back" variant="ghost" onPress={() => setClosing(false)} />
           </View>
-        </ScrollView>
+        </ScreenScroll>
       </Screen>
     );
   }

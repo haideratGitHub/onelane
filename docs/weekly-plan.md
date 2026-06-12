@@ -10,10 +10,11 @@ weeks.
 | File | Role |
 |---|---|
 | `mobile/app/(app)/plan.tsx` | The Plan screen: total-hours card, per-lane ± steppers, tappable lane cards (→ editor), "＋ Add lane". |
-| `mobile/app/lane/[id].tsx` | **Lane editor modal** (`/lane/new` to create): name, emoji icon grid, color swatches, target stepper, Archive (with guards). Root-level modal like `session/*`. |
-| `mobile/src/store/useApp.ts` | `setDomainTarget`, `addDomain`, `editDomain`, `archiveDomain`, `loggedHoursFor`, `ensureWeek`; state `domains` (active), `domainsAll` (incl. archived). |
-| `mobile/src/firebase/repositories.ts` | `observeDomains` (**emits all, incl. archived**), `updateDomain`, `createDomain`, `observeWeek`, `upsertWeek`, `bootstrapDomains`. |
-| `mobile/src/domain/constants.ts` | `DEFAULT_DOMAINS` (starter lanes), `MAX_REASONABLE_WEEK_HOURS` (right-size threshold). |
+| `mobile/app/lane/[id]/index.tsx` | **Lane editor modal** (`/lane/new` to create): **template chips (new lanes only — prefill, never auto-create)**, name, emoji icon grid, color swatches, target stepper, "View session history", Archive (with guards). Root-level modal like `session/*`. |
+| `mobile/app/lane/[id]/history.tsx` | **Lane history modal**: summary (blocks, total time in lane, weekly target) + every finished block newest-first (outcome, date/time, duration, "left early" for abandoned, closure note). One-shot fetch via `fetchLaneHistory`. Opened by tapping a lane on Today or from the editor. |
+| `mobile/src/store/useApp.ts` | `setDomainTarget`, `addDomain`, `editDomain`, `archiveDomain`, `loggedHoursFor`, `fetchLaneHistory` (finished blocks, newest first), `ensureWeek`; state `domains` (active), `domainsAll` (incl. archived). |
+| `mobile/src/firebase/repositories.ts` | `observeDomains` (**emits all, incl. archived**), `updateDomain`, `createDomain`, `observeWeek`, `upsertWeek`. |
+| `mobile/src/domain/constants.ts` | `LANE_TEMPLATES` (editor prefills), `DEFAULT_DOMAINS` (**demo-mode sample lanes only**), `MAX_REASONABLE_WEEK_HOURS` (right-size threshold). |
 | `mobile/src/theme.ts` | `LANE_PALETTE` (colors), `LANE_ICONS` (emoji choices), `laneColor(order)`. |
 | `mobile/src/components/LaneRow.tsx` | Lane progress bar (shared with Review/Today). |
 
@@ -28,7 +29,8 @@ weeks.
 ## Flow
 
 ```
-sign-in (first time) → bootstrapDomains → DEFAULT_DOMAINS written
+sign-in (first time) → NO lanes seeded — Today/Plan show "create your first lane"
+                       empty states; the editor offers LANE_TEMPLATES as prefills
 useAppSync → observeDomains → ALL domains → store derives:
               domainsAll (everything)  +  domains (non-archived)
            → observeWeek → useApp.week; if null → ensureWeek()
@@ -37,6 +39,7 @@ Plan screen:
    tap lane    → /lane/{id}  (editor modal)
    ＋ Add lane → /lane/new
 Lane editor:
+   template chip (new only) → prefills name/icon/color/hours; all editable
    save (new)  → addDomain({name,icon,color,weeklyTargetHours})
                  → order = max(ALL domains' order) + 1 → createDomain
    save (edit) → editDomain(id, patch) → updateDomain
@@ -59,7 +62,20 @@ it snapshots `targets = {domainId: weeklyTargetHours}` for every domain and writ
 - **Archive guards:** archiving the lane that owns the **active session** is blocked
   ("Lane is in use"); archiving a lane with logged hours this week warns that the
   hours remain in Review as history (`loggedHoursFor`).
-- **Lanes from defaults:** new users get 5 starter lanes seeded on first login.
+- **New users start with zero lanes** (deliberate — they build a plan that's
+  theirs). The empty states carry them: Today shows a "create your first lane" card,
+  Plan its add-lane prompt, and the session-start modal links to `/lane/new`.
+- **Lane templates (`LANE_TEMPLATES`):** when creating a lane, a "Need a spark?"
+  chip row (Work, Side project, Learning, Health, Creative, People I love) **prefills**
+  the form — name, icon, color, and a deliberately modest target. Nothing is created
+  until Save and every field stays editable, so templates guide without disturbing
+  the normal creation flow. Editing an existing lane shows no templates.
+- **Lane history:** tapping a lane row on **Today** (or "View session history" in
+  the editor) opens `/lane/[id]/history` — all finished blocks for that lane,
+  newest first, with totals. Fetched once per open via
+  `fetchLaneHistory(domainId)` → `fetchSessionsForDomain` (active block excluded;
+  it lives on Today/the session screen). The **Plan** screen's lane tap still opens
+  the editor — Plan is for shaping the week, Today for living it.
 - **Edit target hours:** ± steppers adjust `weeklyTargetHours` (clamped ≥0),
   optimistic + Firestore write. Also editable in the lane editor.
 - **Total + right-sizing nudge:** when total > `MAX_REASONABLE_WEEK_HOURS` (60h) the

@@ -60,7 +60,6 @@ These are the only place Firestore is touched. Signatures from
 **domains**
 | Function | Kind | Effect |
 |---|---|---|
-| `bootstrapDomains(uid)` | write | Seeds `DEFAULT_DOMAINS` once (skips if any domain exists). Batch write. |
 | `observeDomains(uid, cb)` | listen | `orderBy("order")`, emits **all** domains incl. archived (the store derives the active subset — archived lanes must stay resolvable for history). Returns unsub. |
 | `createDomain(uid, data)` | write | New domain doc; returns its id. |
 | `updateDomain(uid, id, patch)` | write | Partial update (used for `weeklyTargetHours`). |
@@ -75,6 +74,7 @@ These are the only place Firestore is touched. Signatures from
 | `updateSession(uid, session)` | write | `set(..., {merge:true})`. |
 | `observeActiveSession(uid, cb)` | listen | `where("status","==","active").limit(1)` → `Session | null`. **This is how the app knows the current active session.** |
 | `observeSessionsForWeek(uid, weekId, cb)` | listen | `where("weekId","==",weekId)` → `Session[]`. Powers Today + Review. |
+| `fetchSessionsForDomain(uid, domainId)` | read (one-shot) | `where("domainId","==",domainId)` via `getDocs` → `Session[]`. Powers the lane-history screen. **Equality-only, no orderBy** → no composite index; callers sort client-side (revisit with orderBy+index+limit if volume grows). |
 
 **parkingLot**
 | `addParkingItem(uid, data)` | write | New item; returns id. |

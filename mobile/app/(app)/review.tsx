@@ -1,6 +1,14 @@
 import { useState } from "react";
-import { View, Text, ScrollView } from "react-native";
-import { Screen, Heading, Muted, Card, Label, Field } from "@/src/components/ui";
+import { View, Text } from "react-native";
+import {
+  Screen,
+  ScreenScroll,
+  Heading,
+  Muted,
+  Card,
+  Label,
+  Field,
+} from "@/src/components/ui";
 import { LaneRow } from "@/src/components/LaneRow";
 import { useApp } from "@/src/store/useApp";
 import {
@@ -30,7 +38,7 @@ export default function Review() {
 
   return (
     <Screen>
-      <ScrollView contentContainerClassName="px-5 pb-12 pt-2">
+      <ScreenScroll contentContainerClassName="px-5 pb-12 pt-2">
         <Heading>Weekly review</Heading>
         <Muted>{formatWeekRange(weekId)}</Muted>
 
@@ -85,7 +93,7 @@ export default function Review() {
             />
           ))}
         </View>
-      </ScrollView>
+      </ScreenScroll>
     </Screen>
   );
 }

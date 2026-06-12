@@ -47,11 +47,14 @@ All timestamps are **epoch ms (`number`)** — see [architecture.md](architectur
 
 - **`WIN_THRESHOLD = 0.7`** — a lane "wins" at ≥70% of its target. This single number
   encodes "progress over perfection"; it's referenced by `streak.ts` and `review.ts`.
-- **`DEFAULT_BLOCK_MINUTES = 50`** — default block length / yak-shave fallback.
+- **`DEFAULT_BLOCK_MINUTES = 60`** — default block length on the session-start
+  screen. (The `hasOverrun` fallback parameter is still 50 — only used when
+  `plannedDurationMin` is null, which the start screen never produces.)
 - **`MAX_REASONABLE_WEEK_HOURS = 60`** — above this total the Plan screen shows the
   right-sizing nudge.
 - **`DEFAULT_SETTINGS`** — Monday week start, quiet hours 22:00–07:00, max 6 check-ins/day, `standard` style. The fallback base for `mergeSettings` (persisted settings overlay it).
-- **`DEFAULT_DOMAINS`** — the 5 starter lanes (Office/Trading/SaaS/Learning/Gym) with colors, icons (emoji, used in the app UI), and target hours. Seeded on first login.
+- **`DEFAULT_DOMAINS`** — 5 sample lanes (Office/Trading/SaaS/Learning/Gym), used **only** by demo mode's "explore with sample data" seeding. Real users start with zero lanes.
+- **`LANE_TEMPLATES`** — one-tap prefills offered by the lane editor when creating a lane (Work, Side project, Learning, Health, Creative, People I love). Prefill-only; nothing is created until the user saves.
 - **`WEEKLY_REFLECTION_PROMPTS`**, **`CHECKIN_PROMPTS`** — UI copy kept here so it's consistent.
 
 ## `week.ts` — week identity

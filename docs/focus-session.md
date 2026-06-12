@@ -9,7 +9,7 @@ built around.
 
 | File | Role |
 |---|---|
-| `mobile/app/session/start.tsx` | Modal: pick a lane + state the one outcome + block length → `startSession`. |
+| `mobile/app/session/start.tsx` | Modal ("Start a focus session"): pick a lane + state the one outcome + block length (30/60/90 or custom) → `startSession`. |
 | `mobile/app/session/[id].tsx` | The live focus screen: pinned outcome, timer, pause/resume, capture, closure, abandon. |
 | `mobile/app/capture.tsx` | Quick parking capture, reachable from the session (see [parking-lot.md](parking-lot.md)). |
 | `mobile/app/(app)/index.tsx` | Today screen: shows the active-session card or the "Start a focus session" CTA. |
@@ -34,6 +34,7 @@ Today (/) ──"Start"──► /session/start (modal)
   newSession(id=newSessionId, now)  →  store.activeSession (optimistic)
         │                              createSession(uid, session)  → Firestore
         │                              scheduleSessionNudges()       → activeNudgeIds
+        │                              presentSessionNotification()  → lock-screen card
         ▼
   router.replace(/session/<id>)
         │
@@ -48,7 +49,7 @@ Today (/) ──"Start"──► /session/start (modal)
    │  • "Leave the lane" → confirm → abandonActive │
    └───────────────────────────────────────────────┘
         │ complete/abandon: finalize session, set activeSession=null,
-        │ cancelNudges(activeNudgeIds)
+        │ cancelNudges(activeNudgeIds) + dismissSessionNotification()
         ▼
   router.replace(/)   (Today; Review reflects the new actuals)
 ```
@@ -60,10 +61,14 @@ and `<Redirect href="/" />`s if there's no active session.
 
 ## Features & how each works
 
-- **Enter a lane (`start.tsx`):** lane chips (from `domains`), a multiline "one
-  outcome" field, and 25/50/90-min block-length chips. Start is disabled until a lane
-  and a non-empty outcome are set. `plannedDurationMin` seeds the nudge timing and the
-  yak-shave threshold.
+- **Start a focus session (`start.tsx`):** lane chips (from `domains`), a multiline
+  "one outcome" field, and block-length chips — **30 / 60 / 90 min plus "Custom"**
+  (number-pad field, clamped 5–240 min; invalid custom input disables Start). The
+  title says "Start a focus session" (the user just tapped a button with that label —
+  don't reintroduce "Enter a lane"). Default is `DEFAULT_BLOCK_MINUTES` (60). Start
+  is disabled until a lane, a non-empty outcome, and valid minutes are set.
+  `plannedDurationMin` seeds the nudge timing and the yak-shave threshold. With no
+  lanes yet, the modal links to `/lane/new`. Keyboard-aware via `ScreenScroll`.
 - **Pinned outcome:** the `intendedOutcome` is shown in a card at the top of the
   session the entire block — the anchor that fights yak-shaving.
 - **Timestamp-based timer:** `useElapsed(activeSession)` recomputes
@@ -74,7 +79,7 @@ and `<Redirect href="/" />`s if there's no active session.
 - **Pause / resume:** closes/opens a segment via the pure helpers; paused time does
   not count. Each transition persists via `updateSession`.
 - **Planned duration visible:** the status line under the timer shows
-  `Focused · planned 50 min` (when `plannedDurationMin` is set), so the soft target
+  `Focused · planned 60 min` (when `plannedDurationMin` is set), so the soft target
   is visible before the overrun banner ever appears.
 - **Yak-shave guard:** once `hasOverrun(session, now)` (elapsed > planned, or 50-min
   fallback), a calm banner appears suggesting you park the side-quest or close the
@@ -88,6 +93,12 @@ and `<Redirect href="/" />`s if there's no active session.
 - **Check-in nudges:** on start, a mid-block check-in (only if `checkinStyle ==
   "standard"`) and a block-edge wrap-up are scheduled; their ids are kept in
   `activeNudgeIds` and cancelled on finish. Details in [notifications.md](notifications.md).
+- **Lock-screen session card + park-from-lock-screen:** session start also presents
+  a notification (lane, outcome, start time, planned minutes) that sits on the lock
+  screen for the block; long-pressing it exposes a **"＋ Park a thought" text action**
+  that writes a parking item without opening the app. Dismissed on complete/abandon.
+  It is a static card, not a live timer (Live Activities = dev-build follow-up).
+  Details in [notifications.md](notifications.md).
 
 ## Caveats / gotchas (read before changing)
 
@@ -113,7 +124,9 @@ and `<Redirect href="/" />`s if there's no active session.
 
 ## Known gaps
 
-- No "resume previous block / session history" UI.
+- ~~No session history UI~~ — **done per lane**: `/lane/[id]/history` lists a lane's
+  finished blocks (see [weekly-plan.md](weekly-plan.md)). Still no "resume previous
+  block" and no cross-lane chronological history.
 - No hard single-active-session guard.
 - Notification action buttons (Still on it / Switched / Done) are scheduled but their
   taps aren't yet handled in-app (see [notifications.md](notifications.md)).

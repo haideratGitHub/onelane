@@ -36,7 +36,8 @@ export default function RootLayout() {
         >
           <Stack.Screen name="session/start" options={{ presentation: "modal" }} />
           <Stack.Screen name="capture" options={{ presentation: "modal" }} />
-          <Stack.Screen name="lane/[id]" options={{ presentation: "modal" }} />
+          <Stack.Screen name="lane/[id]/index" options={{ presentation: "modal" }} />
+          <Stack.Screen name="lane/[id]/history" options={{ presentation: "modal" }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

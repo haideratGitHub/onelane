@@ -2,10 +2,7 @@ import { useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -15,14 +12,14 @@ import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import {
   Screen,
+  ScreenScroll,
   Button,
-  Heading,
-  Muted,
   Field,
   Label,
   PasswordField,
 } from "@/src/components/ui";
 import {
+  friendlyAuthError,
   isFirebaseConfigured,
   isGoogleSignInAvailable,
   signInAsDemo,
@@ -59,8 +56,8 @@ export default function SignIn() {
       router.replace("/");
     } catch (e) {
       Alert.alert(
-        isSignup ? "Sign-up failed" : "Sign-in failed",
-        e instanceof Error ? e.message : "Please try again.",
+        isSignup ? "Couldn't create your account" : "Couldn't sign you in",
+        friendlyAuthError(e),
       );
     } finally {
       setLoading(false);
@@ -74,10 +71,7 @@ export default function SignIn() {
       const user = await signInWithGoogle();
       if (user) router.replace("/");
     } catch (e) {
-      Alert.alert(
-        "Google sign-in failed",
-        e instanceof Error ? e.message : "Please try again.",
-      );
+      Alert.alert("Couldn't sign you in with Google", friendlyAuthError(e));
     } finally {
       setLoading(false);
     }
@@ -95,139 +89,122 @@ export default function SignIn() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <ScreenScroll
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          paddingHorizontal: 24,
+          paddingVertical: 32,
+        }}
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingHorizontal: 24,
-            paddingVertical: 32,
-          }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          showsVerticalScrollIndicator={false}
-        >
-          <View className="mb-3 flex-row items-center gap-2">
-            <View className="h-7 w-7 items-center justify-center rounded-md bg-line">
-              <View className="h-3.5 w-[3px] rounded-full bg-ink" />
+        {/* Brand block — centered, minimal. The product explains itself inside. */}
+        <View className="mb-10 items-center">
+          <View className="mb-3 h-12 w-12 items-center justify-center rounded-xl bg-line">
+            <View className="h-6 w-[5px] rounded-full bg-ink" />
+          </View>
+          <Text className="text-2xl font-bold text-white">onelane</Text>
+          <Text className="mt-1 text-base text-fog">Stay in one lane.</Text>
+        </View>
+
+        <View className="gap-4">
+          {!isFirebaseConfigured && (
+            <View className="rounded-lg border border-line/30 bg-line/10 px-3 py-2">
+              <Text className="text-xs text-line">
+                Demo mode — any email and password works. Your account stays on
+                this device and resets on reload.
+              </Text>
             </View>
-            <Text className="text-lg font-semibold text-white">onelane</Text>
+          )}
+
+          <View>
+            <Label>Email</Label>
+            <Field
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              editable={!loading}
+            />
+          </View>
+          <View>
+            <Label>Password</Label>
+            <PasswordField
+              ref={passwordRef}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              autoCapitalize="none"
+              autoComplete={isSignup ? "new-password" : "password"}
+              returnKeyType="go"
+              onSubmitEditing={onSubmit}
+              editable={!loading}
+            />
           </View>
 
-          <Heading>Stay in one lane.</Heading>
-          <View className="mt-3 max-w-sm">
-            <Muted>
-              Protect single-tasking. Capture distractions without chasing them. End
-              the week knowing exactly what you did.
-            </Muted>
-          </View>
+          <Button
+            title={
+              loading
+                ? isSignup
+                  ? "Creating account…"
+                  : "Signing in…"
+                : isSignup
+                  ? "Create account"
+                  : "Sign in"
+            }
+            onPress={onSubmit}
+            disabled={loading}
+          />
+          <Button
+            title={
+              isSignup
+                ? "Have an account? Sign in"
+                : "New here? Create an account"
+            }
+            variant="ghost"
+            onPress={() => setMode(isSignup ? "signin" : "signup")}
+            disabled={loading}
+          />
 
-          <View className="mt-10 gap-4">
-            {!isFirebaseConfigured && (
-              <View className="rounded-lg border border-line/30 bg-line/10 px-3 py-2">
-                <Text className="text-xs text-line">
-                  Demo mode — any email and password works. Your account stays on
-                  this device and resets on reload.
+          {isGoogleSignInAvailable && (
+            <>
+              <View className="my-1 flex-row items-center gap-3">
+                <View className="h-px flex-1 bg-white/10" />
+                <Text className="text-xs uppercase tracking-wider text-fog">
+                  or
                 </Text>
+                <View className="h-px flex-1 bg-white/10" />
               </View>
-            )}
-
-            <View>
-              <Label>Email</Label>
-              <Field
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                returnKeyType="next"
-                submitBehavior="submit"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-                editable={!loading}
-              />
-            </View>
-            <View>
-              <Label>Password</Label>
-              <PasswordField
-                ref={passwordRef}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                autoCapitalize="none"
-                autoComplete={isSignup ? "new-password" : "password"}
-                returnKeyType="go"
-                onSubmitEditing={onSubmit}
-                editable={!loading}
-              />
-            </View>
-
-            <Button
-              title={
-                loading
-                  ? isSignup
-                    ? "Creating account…"
-                    : "Signing in…"
-                  : isSignup
-                    ? "Create account"
-                    : "Sign in"
-              }
-              onPress={onSubmit}
-              disabled={loading}
-            />
-            <Button
-              title={
-                isSignup
-                  ? "Have an account? Sign in"
-                  : "New here? Create an account"
-              }
-              variant="ghost"
-              onPress={() => setMode(isSignup ? "signin" : "signup")}
-              disabled={loading}
-            />
-
-            {isGoogleSignInAvailable && (
-              <>
-                <View className="my-1 flex-row items-center gap-3">
-                  <View className="h-px flex-1 bg-white/10" />
-                  <Text className="text-xs uppercase tracking-wider text-fog">
-                    or
-                  </Text>
-                  <View className="h-px flex-1 bg-white/10" />
-                </View>
-                <Pressable
-                  onPress={onGoogle}
-                  disabled={loading}
-                  className={`flex-row items-center justify-center gap-2 rounded-xl border border-white/15 px-5 py-3.5 ${
-                    loading ? "opacity-50" : ""
-                  }`}
-                >
-                  <Ionicons name="logo-google" size={18} color="#FFFFFF" />
-                  <Text className="font-semibold text-white">
-                    Continue with Google
-                  </Text>
-                </Pressable>
-              </>
-            )}
-
-            {!isFirebaseConfigured && (
-              <Button
-                title="Skip — explore with sample data"
-                variant="ghost"
-                onPress={onDemo}
+              <Pressable
+                onPress={onGoogle}
                 disabled={loading}
-              />
-            )}
-            <Muted>
-              We only use your account to sync your lanes across devices.
-            </Muted>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+                className={`flex-row items-center justify-center gap-2 rounded-xl border border-white/15 px-5 py-3.5 ${
+                  loading ? "opacity-50" : ""
+                }`}
+              >
+                <Ionicons name="logo-google" size={18} color="#FFFFFF" />
+                <Text className="font-semibold text-white">
+                  Continue with Google
+                </Text>
+              </Pressable>
+            </>
+          )}
+
+          {!isFirebaseConfigured && (
+            <Button
+              title="Skip — explore with sample data"
+              variant="ghost"
+              onPress={onDemo}
+              disabled={loading}
+            />
+          )}
+        </View>
+      </ScreenScroll>
     </Screen>
   );
 }

@@ -23,13 +23,22 @@ export function GET(req: NextRequest) {
       { status: 400 },
     );
   }
-  const params = new URLSearchParams({
-    client_id: requiredEnv("GOOGLE_OAUTH_CLIENT_ID"),
-    redirect_uri: `${brokerOrigin(req)}/api/auth/google/callback`,
-    response_type: "code",
-    scope: "openid email profile",
-    state: signState(returnUrl),
-    prompt: "select_account",
-  });
-  return NextResponse.redirect(`${GOOGLE_AUTH_URL}?${params}`);
+  try {
+    const params = new URLSearchParams({
+      client_id: requiredEnv("GOOGLE_OAUTH_CLIENT_ID"),
+      redirect_uri: `${brokerOrigin(req)}/api/auth/google/callback`,
+      response_type: "code",
+      scope: "openid email profile",
+      state: signState(returnUrl),
+      prompt: "select_account",
+    });
+    return NextResponse.redirect(`${GOOGLE_AUTH_URL}?${params}`);
+  } catch (e) {
+    // Next.js prod swallows thrown errors into a blank 500 — surface
+    // misconfiguration (missing env vars) where the person can see it.
+    return new NextResponse(
+      `Auth broker misconfigured: ${e instanceof Error ? e.message : String(e)}`,
+      { status: 500 },
+    );
+  }
 }

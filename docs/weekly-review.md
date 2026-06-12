@@ -46,7 +46,9 @@ Review screen:
   reaches full opacity and shows a ✓ at the 70% win line, stays dimmed (not red) when
   behind — progress, not perfection.
 - **Reflection:** three prompts (`WEEKLY_REFLECTION_PROMPTS`); each saves on blur,
-  keyed by prompt text (re-saving the same prompt **replaces** that answer).
+  keyed by prompt text (re-saving the same prompt **replaces** that answer). The
+  screen scrolls via `ScreenScroll` so the focused field rises above the keyboard
+  (see [architecture.md](architecture.md) §8.1).
 
 ## Caveats / gotchas
 

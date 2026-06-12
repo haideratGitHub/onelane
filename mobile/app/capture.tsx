@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Heading, Muted, Button, Field } from "@/src/components/ui";
+import {
+  Screen,
+  ScreenScroll,
+  Heading,
+  Muted,
+  Button,
+  Field,
+} from "@/src/components/ui";
 import { useApp } from "@/src/store/useApp";
 
 /**
@@ -20,7 +27,7 @@ export default function Capture() {
 
   return (
     <Screen>
-      <View className="flex-1 px-5 pt-4">
+      <ScreenScroll contentContainerClassName="px-5 pb-10 pt-4">
         <Heading>Park it</Heading>
         <Muted>Get it out of your head. You'll triage it later — not now.</Muted>
         <View className="mt-5">
@@ -37,7 +44,7 @@ export default function Capture() {
           <Button title="Park & return" onPress={onSave} disabled={!text.trim()} />
           <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
         </View>
-      </View>
+      </ScreenScroll>
     </Screen>
   );
 }

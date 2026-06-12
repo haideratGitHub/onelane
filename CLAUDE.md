@@ -124,7 +124,9 @@ After domain-logic changes always run `npm test`. After any TS change, run
 Auth is **email/password + Google-via-broker** (native Google Sign-In would need a
 dev build — see [docs/auth.md](docs/auth.md)); only the current week is loaded (no week switcher,
 streaks not surfaced in UI); lane CRUD exists but no reorder/unarchive UI;
-notification action buttons exist but no response listener handles taps;
+check-in notification buttons still have no handler (the session card's
+park-a-thought text action IS handled — `useNotificationActions`); the lock-screen
+session card is static (a live timer needs Live Activities → dev build);
 single-active-session has no hard guard; store CTA links on the landing page are `#`
 placeholders. See each module doc's "Known gaps". (Settings **are** persisted now —
 `users/{uid}.settings`, edited on the Profile tab.)

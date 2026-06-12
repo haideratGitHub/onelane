@@ -8,13 +8,11 @@ import {
   setDoc,
   updateDoc,
   where,
-  writeBatch,
   type DocumentData,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import {
-  DEFAULT_DOMAINS,
   mergeSettings,
   type Domain,
   type ParkingLotItem,
@@ -29,7 +27,6 @@ import {
   weeksCol,
   userDoc,
 } from "./paths";
-import { db } from "./firebase";
 import { isFirebaseConfigured } from "./config";
 import * as demo from "./demo";
 
@@ -58,18 +55,6 @@ function fromDoc<T extends { id: string }>(
 type Unsub = () => void;
 
 /* ----------------------------- domains ----------------------------- */
-
-export async function bootstrapDomains(uid: string): Promise<void> {
-  if (!isFirebaseConfigured) return demo.seedDemoData();
-  const col = domainsCol(uid);
-  const existing = await getDocs(query(col, limit(1)));
-  if (!existing.empty) return; // already seeded
-  const batch = writeBatch(db!);
-  for (const d of DEFAULT_DOMAINS) {
-    batch.set(doc(col), d);
-  }
-  await batch.commit();
-}
 
 /**
  * Emits ALL domains, archived included — the store derives the active subset.
@@ -154,6 +139,23 @@ export function observeActiveSession(
       cb(snap.empty ? null : fromDoc<Session>(snap.docs[0]!));
     },
   );
+}
+
+/**
+ * One-shot fetch of every session in a lane, for the lane-history screen.
+ * Equality-only `where` (no orderBy) so no composite index is needed; callers
+ * sort client-side. Fine at personal-app volume — revisit (orderBy + index +
+ * limit) if a lane ever accumulates thousands of sessions.
+ */
+export async function fetchSessionsForDomain(
+  uid: string,
+  domainId: string,
+): Promise<Session[]> {
+  if (!isFirebaseConfigured) return demo.fetchSessionsForDomainDemo(domainId);
+  const snap = await getDocs(
+    query(sessionsCol(uid), where("domainId", "==", domainId)),
+  );
+  return snap.docs.map((d) => fromDoc<Session>(d));
 }
 
 export function observeSessionsForWeek(
