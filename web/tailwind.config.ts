@@ -11,7 +11,7 @@ const config: Config = {
         slate: "#1B2430",
         fog: "#9AA7B6",
         line: "#FACC15", // lane marking yellow
-        // Per-domain lane identities (kept in sync with mobile DEFAULT_DOMAINS)
+        // Per-domain lane identities (kept in sync with mobile LANE_PALETTE / theme.ts)
         lane: {
           office: "#3B82F6",
           trading: "#10B981",

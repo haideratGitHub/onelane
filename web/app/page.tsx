@@ -10,6 +10,12 @@ import {
 } from "lucide-react";
 import { LaneProgress } from "@/components/LaneProgress";
 import { StoreButtons } from "@/components/StoreButtons";
+import {
+  TodayPhone,
+  FocusPhone,
+  ReviewPhone,
+  LockScreenPhone,
+} from "@/components/PhoneMockups";
 import { Reveal, Stagger, StaggerItem, Float } from "@/components/motion";
 
 export default function Home() {
@@ -19,7 +25,9 @@ export default function Home() {
       <Hero />
       <Problem />
       <Wedge />
+      <LockScreenCapture />
       <HowItWorks />
+      <Showcase />
       <Audience />
       <Reward />
       <Philosophy />
@@ -195,6 +203,92 @@ function Wedge() {
               <p className="mt-4 text-xl font-semibold">{c.t}</p>
               <p className="mt-2 text-sm leading-relaxed text-fog">{c.d}</p>
             </div>
+          </StaggerItem>
+        ))}
+      </Stagger>
+    </Section>
+  );
+}
+
+function LockScreenCapture() {
+  const points: [string, string][] = [
+    ["Your phone stays locked", "The thought is captured in seconds — the screen never even opens."],
+    ["You never leave the lane", "No app-switch, no rabbit hole. The block keeps running, focus unbroken."],
+    ["Triage on your terms", "Everything you park waits in the parking lot for when the block is done."],
+  ];
+  return (
+    <Section className="border-y border-white/5 bg-asphalt/50">
+      <div className="grid items-center gap-12 lg:grid-cols-2">
+        <Reveal>
+          <SectionLabel>New · capture without breaking focus</SectionLabel>
+          <h2 className="max-w-xl text-3xl font-semibold leading-tight sm:text-4xl">
+            Park a thought without unlocking your phone.
+          </h2>
+          <p className="mt-5 max-w-xl text-lg text-fog">
+            Mid-block, something pulls at you — a reply you owe, an idea you can&apos;t
+            lose. Long-press onelane&apos;s notification right on the lock screen, type
+            it, and it drops straight into your parking lot. No unlock, no app, no
+            leaving your lane.
+          </p>
+          <ul className="mt-7 space-y-3.5">
+            {points.map(([t, d]) => (
+              <li key={t} className="flex gap-3">
+                <Check size={18} className="mt-0.5 flex-none text-line" />
+                <span className="text-fog">
+                  <span className="font-semibold text-white">{t}.</span> {d}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+        <Reveal delay={0.15}>
+          <Float className="flex justify-center">
+            <LockScreenPhone width={272} />
+          </Float>
+        </Reveal>
+      </div>
+    </Section>
+  );
+}
+
+function Showcase() {
+  const shots: { Phone: (p: { width?: number }) => React.ReactNode; t: string; d: string }[] = [
+    {
+      Phone: TodayPhone,
+      t: "Today",
+      d: "Start a block or park a thought — this week's lanes at a glance.",
+    },
+    {
+      Phone: FocusPhone,
+      t: "In the lane",
+      d: "One outcome pinned, a timer that survives a locked or closed phone.",
+    },
+    {
+      Phone: ReviewPhone,
+      t: "Weekly review",
+      d: "Planned vs. actual per lane. Hitting 70% counts as a win.",
+    },
+  ];
+  return (
+    <Section>
+      <Reveal>
+        <SectionLabel>A look inside</SectionLabel>
+        <h2 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
+          Built to get out of your way.
+        </h2>
+        <p className="mt-5 max-w-2xl text-lg text-fog">
+          Every screen does one job, fast. Here&apos;s the rough shape of the app.
+        </p>
+      </Reveal>
+      <Stagger className="mt-14 grid gap-12 sm:grid-cols-2 lg:grid-cols-3">
+        {shots.map(({ Phone, t, d }) => (
+          <StaggerItem
+            key={t}
+            className="flex flex-col items-center text-center"
+          >
+            <Phone width={228} />
+            <p className="mt-6 font-semibold text-white">{t}</p>
+            <p className="mt-1 max-w-[15rem] text-sm text-fog">{d}</p>
           </StaggerItem>
         ))}
       </Stagger>

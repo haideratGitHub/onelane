@@ -23,14 +23,24 @@ broker routes ([auth.md](auth.md)); the page itself has no Firebase.
 | `web/tailwind.config.ts` | Brand + lane color tokens, `lane-pulse` keyframe. |
 | `web/components/motion.tsx` | **Client** animation primitives: `Reveal`, `Stagger`, `StaggerItem`, `Float`. |
 | `web/components/LaneProgress.tsx` | **Client** hero/reward visual: lanes with bars that animate to value on scroll; lucide icons. |
+| `web/components/PhoneMockups.tsx` | **Client** pure-CSS iPhone mockups (frame + Dynamic Island + status bar) rendering miniatures of the real app screens: `TodayPhone`, `FocusPhone`, `ReviewPhone`, `LockScreenPhone`. No image assets — same line/asphalt theme + lane palette. Used by the `LockScreenCapture` USP and the `Showcase` section. |
 | `web/components/StoreButtons.tsx` | App Store + Google Play buttons (inline glyphs; placeholder hrefs). |
 
 ## Page structure (`page.tsx`)
 
-`Header → Hero → Problem → Wedge → HowItWorks → Audience → Reward → Philosophy →
-FinalCta → Footer`. Each content section is wrapped in `Reveal`/`Stagger` for
-scroll-in animation. Copy mirrors the product brief; the "wedge" section is the
-positioning ("Not another time tracker" — single-tasking + capture + closure).
+`Header → Hero → Problem → Wedge → LockScreenCapture → HowItWorks → Showcase →
+Audience → Reward → Philosophy → FinalCta → Footer`. Each content section is wrapped
+in `Reveal`/`Stagger` for scroll-in animation. Copy mirrors the product brief; the
+"wedge" section is the positioning ("Not another time tracker" — single-tasking +
+capture + closure).
+
+- **`LockScreenCapture`** — the headline USP spotlight (2-col, like `Reward`): copy +
+  a `LockScreenPhone` mockup showing onelane's lock-screen notification with its
+  **"＋ Park a thought" text action open**. Sells "park a distraction without
+  unlocking your phone / leaving your lane" (the `expo-notifications` text-input
+  action — see [notifications.md](notifications.md) / [focus-session.md](focus-session.md)).
+- **`Showcase`** ("A look inside") — a responsive 3-up of `TodayPhone` / `FocusPhone` /
+  `ReviewPhone` mockups with captions, giving a rough feel of the real UX.
 
 ## Animations (framer-motion)
 
@@ -44,10 +54,14 @@ positioning ("Not another time tracker" — single-tasking + capture + closure).
 - Hero has a soft blurred glow (`bg-line/10 blur-[120px]`) and the badge uses the
   `lane-pulse` keyframe.
 
+- **`LockScreenPhone`** animates its notification card in (`whileInView`, once); the
+  `LockScreenCapture` section also wraps it in `Float` for a gentle bob.
+
 **RSC boundary:** `page.tsx` is a server component. Anything using framer-motion must
-be a client component — that's why `motion.tsx` and `LaneProgress.tsx` start with
-`"use client"`. lucide icons and `StoreButtons` render fine on the server. If you add
-new animation directly in `page.tsx`, move it into a client component instead.
+be a client component — that's why `motion.tsx`, `LaneProgress.tsx`, and
+`PhoneMockups.tsx` start with `"use client"`. lucide icons and `StoreButtons` render
+fine on the server. If you add new animation directly in `page.tsx`, move it into a
+client component instead.
 
 ## Icons (lucide-react)
 
@@ -91,7 +105,7 @@ cd web
 npm install
 npm run dev          # http://localhost:3000
 npm run typecheck
-npm run build        # static; current page first-load ~140 kB JS
+npm run build        # static; current page first-load ~142 kB JS
 ```
 Deploy to Vercel (zero-config Next.js). The marketing page needs no env; the
 **auth broker routes do** (`web/.env.example` → Vercel project env) — without
@@ -112,7 +126,9 @@ them the page still builds/serves fine and only `/api/auth/google/*` fails.
 ## Known gaps
 
 - Real store links + (ideally) official store badges.
-- No screenshots/app preview imagery yet (placeholders are the `LaneProgress` mock).
+- App preview is **CSS mockups** (`PhoneMockups.tsx`), not real device screenshots —
+  faithful to the screens but hand-built; swap for actual captures when there are
+  store-quality ones. Keep the mockup copy/state in sync if the app screens change.
 - No privacy policy / support pages (the App Store requires a privacy policy URL).
 - No analytics.
 
