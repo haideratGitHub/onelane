@@ -1,0 +1,31 @@
+# onelane
+
+> onelane is a cross-platform (iOS + Android) focus & accountability app for people running more than one serious thing — e.g. a full-time job alongside trading, a SaaS, or deliberate learning. Its wedge is **anti-drift**: it protects single-tasking, captures distractions without acting on them, and forces closure, turning a weekly plan into visible, sustainable progress. It is a mirror and a guardrail, not a taskmaster.
+
+## What it is
+
+onelane treats each life domain as a **lane** (with its own color and a flexible weekly hour budget) and the core rule is to stay in one lane at a time. Focused time is "distance travelled"; at week's end the lanes complete into one track record.
+
+## The problem it solves
+
+Drift: task-switching, yak-shaving (one task needs another needs another until the original goal vanishes), and no closure — working hard all week yet feeling like nothing got done. Unlike time trackers (Toggl, RescueTime, Clockify) that measure where time went after the fact, onelane prevents the drift while it's happening.
+
+## Core features (the three pillars)
+
+- **Single-tasking** — commit to one lane per focus block and keep your one intended outcome pinned the whole time. A timestamp-based timer survives a locked or closed phone.
+- **Distraction capture** — a 5-second "parking lot" for off-task impulses, honored without being obeyed. You can park a thought straight from the lock-screen notification without unlocking your phone or leaving your lane; triage later.
+- **Closure** — end every block with one line on what got done, so scattered effort becomes a clear, visible record. A weekly review shows planned vs. actual per lane.
+
+## Who it's for
+
+Operators and builders who are ambitious, self-directed, and motivated but lose momentum to context-switching and a lack of visible progress — and who won't tolerate heavy manual logging (every action takes under five seconds).
+
+## Principles
+
+Progress over perfection (hitting ~70% of an ambitious plan is a win, not a failure); sustainable over maximal; low friction; calm not nagging; honest by design (self-report, not surveillance — a single miss never resets you to zero).
+
+## Links
+
+- Home: https://onelane.app
+- App Store: (coming soon)
+- Google Play: (coming soon)

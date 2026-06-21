@@ -39,7 +39,8 @@ stale, fix the staleness as part of the work and say so.
 | Lanes (domains), weekly hour budgets, right-sizing | [docs/weekly-plan.md](docs/weekly-plan.md) |
 | Planned-vs-actual, reflections, streaks display | [docs/weekly-review.md](docs/weekly-review.md) |
 | Check-ins / local notifications / quiet hours | [docs/notifications.md](docs/notifications.md) |
-| The marketing site in `web/` (sections, animations, icons, store buttons) | [docs/landing-page.md](docs/landing-page.md) |
+| The marketing site in `web/` (sections, animations, icons, store buttons) **+ web SEO/AEO** (metadata, JSON-LD, sitemap, robots, FAQ, `llms.txt`) | [docs/landing-page.md](docs/landing-page.md) |
+| Publishing to the **App Store / Google Play**: store listing metadata, ASO keywords, screenshots, launch checklist | [docs/aso.md](docs/aso.md) |
 | Logo / app icon / branding assets | [docs/design-brief.md](docs/design-brief.md) |
 
 Many tasks span modules — e.g. "make notification check-ins actually record a

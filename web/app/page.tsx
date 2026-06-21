@@ -17,6 +17,7 @@ import {
   LockScreenPhone,
 } from "@/components/PhoneMockups";
 import { Reveal, Stagger, StaggerItem, Float } from "@/components/motion";
+import { FAQS } from "@/lib/faq";
 
 export default function Home() {
   return (
@@ -31,6 +32,7 @@ export default function Home() {
       <Audience />
       <Reward />
       <Philosophy />
+      <Faq />
       <FinalCta />
       <Footer />
     </main>
@@ -423,6 +425,35 @@ function Philosophy() {
   );
 }
 
+function Faq() {
+  return (
+    <Section className="border-y border-white/5 bg-asphalt/50">
+      <Reveal>
+        <SectionLabel>FAQ</SectionLabel>
+        <h2 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
+          Questions, answered.
+        </h2>
+        <p className="mt-5 max-w-2xl text-lg text-fog">
+          What onelane is, the problem it solves, and how it&apos;s different.
+        </p>
+      </Reveal>
+      {/* Plain, always-visible Q&A (no collapse) so both readers and AI answer
+          engines get the full text. Mirrors lib/faq.ts, which also feeds the
+          FAQPage JSON-LD. */}
+      <Stagger className="mt-10 grid gap-4 md:grid-cols-2">
+        {FAQS.map((f) => (
+          <StaggerItem key={f.q}>
+            <div className="h-full rounded-2xl border border-white/10 bg-slate p-6">
+              <h3 className="text-lg font-semibold text-white">{f.q}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-fog">{f.a}</p>
+            </div>
+          </StaggerItem>
+        ))}
+      </Stagger>
+    </Section>
+  );
+}
+
 function FinalCta() {
   return (
     <Section className="border-t border-white/5">
@@ -450,7 +481,15 @@ function Footer() {
     <footer className="mx-auto max-w-6xl px-6 py-12">
       <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-8 sm:flex-row">
         <Logo />
-        <p className="text-sm text-fog">Honesty by design. © 2026 onelane.</p>
+        <nav className="flex items-center gap-5 text-sm text-fog">
+          <a href="/privacy" className="transition hover:text-line">
+            Privacy
+          </a>
+          <a href="/support" className="transition hover:text-line">
+            Support
+          </a>
+          <span>Honesty by design. © 2026 onelane.</span>
+        </nav>
       </div>
     </footer>
   );

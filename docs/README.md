@@ -24,7 +24,8 @@ and how to change it without causing regressions.
 | [weekly-plan.md](weekly-plan.md) | Plan / lanes | Domains (lanes), weekly hour budgets, right-sizing |
 | [weekly-review.md](weekly-review.md) | Weekly review | Planned-vs-actual, reflections, streaks |
 | [notifications.md](notifications.md) | Notifications | `expo-notifications` scheduling, check-ins, quiet hours |
-| [landing-page.md](landing-page.md) | Marketing site (`web/`) | The Next.js landing page, animations, store CTAs |
+| [landing-page.md](landing-page.md) | Marketing site (`web/`) | The Next.js landing page, animations, store CTAs, web SEO/AEO (metadata, JSON-LD, sitemap, robots, FAQ) |
+| [aso.md](aso.md) | App Store Optimization | Publishing to the App Store / Google Play: store listing metadata, keywords, screenshots, the launch checklist |
 
 Start with **architecture.md** if you're new; it explains the conventions every
 other doc assumes (especially the epoch-millisecond timestamps and the

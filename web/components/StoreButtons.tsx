@@ -2,11 +2,11 @@
  * App Store / Google Play download buttons.
  *
  * These are lightweight on-brand buttons with inline glyphs. Before launch, swap
- * the hrefs for the real store URLs — and ideally replace these with the official
- * Apple/Google badge assets to satisfy each store's branding guidelines.
+ * the hrefs for the real store URLs (set them once in lib/site.ts) — and ideally
+ * replace these with the official Apple/Google badge assets to satisfy each
+ * store's branding guidelines.
  */
-const APP_STORE_URL = "#";
-const PLAY_STORE_URL = "#";
+import { APP_STORE_URL, PLAY_STORE_URL } from "@/lib/site";
 
 function AppleGlyph() {
   return (
